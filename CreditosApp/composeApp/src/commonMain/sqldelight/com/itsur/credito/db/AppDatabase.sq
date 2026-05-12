@@ -1,0 +1,17 @@
+CREATE TABLE Cliente (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    nombre TEXT NOT NULL,
+    limite_credito REAL NOT NULL
+);
+
+CREATE TABLE Credito (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    cliente_id INTEGER NOT NULL,
+    monto_prestado REAL NOT NULL,
+    saldo_pendiente REAL NOT NULL,
+    FOREIGN KEY (cliente_id) REFERENCES Cliente(id)
+);
+
+-- Una consulta simple para que el generador trabaje
+obtenerClientes:
+SELECT * FROM Cliente;
