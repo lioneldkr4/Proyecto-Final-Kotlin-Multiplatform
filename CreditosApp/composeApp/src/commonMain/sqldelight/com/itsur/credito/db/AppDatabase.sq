@@ -12,6 +12,17 @@ CREATE TABLE Credito (
     FOREIGN KEY (cliente_id) REFERENCES Cliente(id)
 );
 
--- Una consulta simple para que el generador trabaje
-obtenerClientes:
-SELECT * FROM Cliente;
+CREATE TABLE Abono (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    credito_id INTEGER NOT NULL,
+    monto_abonado REAL NOT NULL,
+    fecha TEXT NOT NULL,
+    FOREIGN KEY (credito_id) REFERENCES Credito(id)
+);
+
+-- Consulta para tu búsqueda por nombre (sin los ||)
+buscarClientePorNombre:
+SELECT Cliente.nombre, Cliente.limite_credito, Credito.saldo_pendiente
+FROM Cliente
+JOIN Credito ON Cliente.id = Credito.cliente_id
+WHERE Cliente.nombre LIKE ?;
