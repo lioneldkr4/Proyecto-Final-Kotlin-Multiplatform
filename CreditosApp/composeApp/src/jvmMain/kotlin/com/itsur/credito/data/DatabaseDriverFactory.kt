@@ -6,9 +6,13 @@ import com.itsur.credito.db.AppDatabase
 
 actual class DatabaseDriverFactory {
     actual fun createDriver(): SqlDriver {
-        // En Desktop, la base de datos se crea en memoria para pruebas o en un archivo local
-        val driver: SqlDriver = JdbcSqliteDriver(JdbcSqliteDriver.IN_MEMORY)
-        AppDatabase.Schema.create(driver)
+        val driver = JdbcSqliteDriver("jdbc:sqlite:creditos.db")
+
+        try {
+            AppDatabase.Schema.create(driver)
+        } catch (e: Exception) {
+        }
+
         return driver
     }
 }

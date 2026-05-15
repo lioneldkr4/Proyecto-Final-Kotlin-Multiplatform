@@ -1,6 +1,8 @@
 CREATE TABLE Cliente (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     nombre TEXT NOT NULL,
+    telefono TEXT,
+    direccion TEXT,
     limite_credito REAL NOT NULL
 );
 
@@ -20,9 +22,43 @@ CREATE TABLE Abono (
     FOREIGN KEY (credito_id) REFERENCES Credito(id)
 );
 
+
 -- Consulta para tu búsqueda por nombre (sin los ||)
 buscarClientePorNombre:
 SELECT Cliente.nombre, Cliente.limite_credito, Credito.saldo_pendiente
 FROM Cliente
 JOIN Credito ON Cliente.id = Credito.cliente_id
 WHERE Cliente.nombre LIKE ?;
+insertarCliente:
+INSERT INTO Cliente(nombre, telefono, direccion, limite_credito)
+VALUES (?, ?, ?, ?);
+buscarClientesGenerales:
+SELECT * FROM Cliente WHERE nombre LIKE ?;
+
+-- Guardar cambios
+insertarAbono:
+INSERT INTO Abono(credito_id, monto_abonado, fecha)
+VALUES (?, ?, ?);
+
+obtenerAbonosPorCliente:
+SELECT Abono.*
+FROM Abono
+JOIN Credito ON Abono.credito_id = Credito.id
+WHERE Credito.cliente_id = ?;
+
+obtenerCreditoPorCliente:
+SELECT * FROM Credito WHERE cliente_id = ?;
+
+insertarCredito:
+INSERT INTO Credito(cliente_id, monto_prestado, saldo_pendiente)
+VALUES (?, ?, ?);
+
+-- Guardar aunque se cierre
+obtenerTodosLosClientes:
+SELECT * FROM Cliente;
+
+-- actualizar creditos
+actualizarSaldoPendiente:
+UPDATE Credito
+SET saldo_pendiente = saldo_pendiente - ?
+WHERE id = ?;

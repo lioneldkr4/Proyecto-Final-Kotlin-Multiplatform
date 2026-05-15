@@ -3,23 +3,18 @@ package com.itsur.credito
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
-import androidx.activity.enableEdgeToEdge
-import androidx.compose.runtime.Composable
-import androidx.compose.ui.tooling.preview.Preview
+import com.itsur.credito.data.DatabaseDriverFactory
+import com.itsur.credito.db.AppDatabase
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
-        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
+        val driver = DatabaseDriverFactory(applicationContext).createDriver()
+        val database = AppDatabase(driver)
+
         setContent {
-            App()
+            App(database = database)
         }
     }
-}
-
-@Preview
-@Composable
-fun AppAndroidPreview() {
-    App()
 }
