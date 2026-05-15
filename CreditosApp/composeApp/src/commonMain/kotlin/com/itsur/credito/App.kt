@@ -11,11 +11,22 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.itsur.credito.db.AppDatabase
+// --- IMPORTS CORREGIDOS PARA COMPATIBILIDAD DESDE API 1 ---
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
 
 
 enum class Pantalla {
     Inicio, Detalles, AgregarCliente
 }
+
+// Estructura para unificar Abonos y Créditos en la interfaz
+data class AccionUI(
+    val tipo: String,
+    val monto: Double,
+    val detalle: String
+)
 
 @Composable
 fun App(database: AppDatabase) {
@@ -77,14 +88,14 @@ fun PantallaCobranza(
     onVerMasClick: (com.itsur.credito.db.Cliente) -> Unit,
     onNuevoClienteClick: () -> Unit
 ) {
+    val queries = database.appDatabaseQueries
     var nombreBusqueda by remember { mutableStateOf("") }
     var clientesEncontrados by remember { mutableStateOf<List<com.itsur.credito.db.Cliente>>(emptyList()) }
     var busquedaRealizada by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         try {
-            val queries = database.appDatabaseQueries
-            // clientesEncontrados = queries.obtenerTodosLosClientes().executeAsList()
+            clientesEncontrados = queries.obtenerTodosLosClientes().executeAsList()
             busquedaRealizada = true
         } catch (e: Exception) {
             println("Aún no hay datos para cargar")
@@ -106,7 +117,6 @@ fun PantallaCobranza(
         Row(modifier = Modifier.fillMaxWidth().padding(top = 8.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Button(onClick = {
                 try {
-                    val queries = database.appDatabaseQueries
                     clientesEncontrados = queries.buscarClientesGenerales("%$nombreBusqueda%").executeAsList()
                     busquedaRealizada = true
                 } catch (e: Exception) {
@@ -168,139 +178,212 @@ fun PantallaDetalles(
     onVolver: () -> Unit,
     onImprimirPdf: () -> Unit
 ) {
-        val queries = database.appDatabaseQueries
-        var mostrarDialogoAbono by remember { mutableStateOf(false) }
-        var montoAbono by remember { mutableStateOf("") }
-        var fechaAbono by remember { mutableStateOf("") }
+    val queries = database.appDatabaseQueries
+    var mostrarDialogoAbono by remember { mutableStateOf(false) }
+    var montoAbono by remember { mutableStateOf("") }
 
-        var creditoActual by remember { mutableStateOf<com.itsur.credito.db.Credito?>(null) }
-        var abonosList by remember { mutableStateOf(listOf<com.itsur.credito.db.Abono>()) }
+    var mostrarDialogoCredito by remember { mutableStateOf(false) }
+    var montoCredito by remember { mutableStateOf("") }
 
-        LaunchedEffect(cliente.id) {
-            creditoActual = queries.obtenerCreditoPorCliente(cliente.id).executeAsOneOrNull()
-            abonosList = queries.obtenerAbonosPorCliente(cliente.id).executeAsList()
+    var creditoActual by remember { mutableStateOf<com.itsur.credito.db.Credito?>(null) }
+
+    var abonosList by remember { mutableStateOf(listOf<com.itsur.credito.db.Abono>()) }
+    var creditosNuevosList by remember { mutableStateOf(listOf<AccionUI>()) }
+
+    LaunchedEffect(cliente.id) {
+        creditoActual = queries.obtenerCreditoPorCliente(cliente.id).executeAsOneOrNull()
+        abonosList = queries.obtenerAbonosPorCliente(cliente.id).executeAsList()
+    }
+
+    val accionesList = remember(abonosList, creditosNuevosList) {
+        val abonosUI = abonosList.map {
+            AccionUI(tipo = "Abono", monto = it.monto_abonado, detalle = "Fecha: ${it.fecha}")
+        }
+        abonosUI + creditosNuevosList
+    }
+
+    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            TextButton(onClick = onVolver) { Text("<- Regresar") }
+            Spacer(modifier = Modifier.width(8.dp))
+            Text("Detalles del Cliente", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
         }
 
-        Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                TextButton(onClick = onVolver) { Text("<- Regresar") }
-                Spacer(modifier = Modifier.width(8.dp))
-                Text("Detalles del Cliente", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            }
+        Spacer(modifier = Modifier.height(16.dp))
 
-            Spacer(modifier = Modifier.height(16.dp))
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(text = cliente.nombre, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
+                Spacer(modifier = Modifier.height(8.dp))
 
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
-            ) {
-                Column(modifier = Modifier.padding(16.dp)) {
-                    Text(text = cliente.nombre, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
-                    Spacer(modifier = Modifier.height(8.dp))
+                Text("Teléfono: ${cliente.telefono ?: "No proporcionado"}")
+                Text("Dirección: ${cliente.direccion ?: "No proporcionada"}")
+                Spacer(modifier = Modifier.height(8.dp))
 
-                    Text("Teléfono: ${cliente.telefono ?: "No proporcionado"}")
-                    Text("Dirección: ${cliente.direccion ?: "No proporcionada"}")
-                    Spacer(modifier = Modifier.height(8.dp))
-
-                    Text(
-                        text = "Límite de crédito: $${cliente.limite_credito}",
-                        color = MaterialTheme.colorScheme.primary,
-                        fontWeight = FontWeight.Bold
-                    )
-                }
-            }
-
-            Spacer(modifier = Modifier.height(16.dp))
-
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                OutlinedButton(onClick = onImprimirPdf) { Text("Generar PDF") }
-                Button(onClick = { mostrarDialogoAbono = true }) { Text("Abonar") }
-            }
-
-            if (abonosList.isNotEmpty()) {
-                Text("Abonos realizados:", modifier = Modifier.padding(top = 16.dp), fontWeight = FontWeight.SemiBold)
-
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
-                    items(abonosList) { abono ->
-                        Card(modifier = Modifier.fillMaxWidth()) {
-                            Column(modifier = Modifier.padding(16.dp)) {
-                                Text("Monto: $${abono.monto_abonado}", fontWeight = FontWeight.Bold)
-                                Text("Fecha: ${abono.fecha}", style = MaterialTheme.typography.bodySmall)
-                            }
-                        }
-                    }
-                }
-            }
-
-            if (mostrarDialogoAbono) {
-                AlertDialog(
-                    onDismissRequest = { mostrarDialogoAbono = false },
-                    title = { Text("Registrar Abono") },
-                    text = {
-                        Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                            OutlinedTextField(
-                                value = montoAbono,
-                                onValueChange = {
-                                    if (it.isEmpty() || it.matches(Regex("^\\d*\\.?\\d*$"))) {
-                                        montoAbono = it
-                                    }
-                                },
-                                label = { Text("Monto del abono ($)") },
-                                singleLine = true
-                            )
-                            OutlinedTextField(
-                                value = fechaAbono,
-                                onValueChange = { fechaAbono = it },
-                                label = { Text("Fecha (ej. 14/05/2026)") },
-                                singleLine = true
-                            )
-                        }
-                    },
-                    confirmButton = {
-                        Button(
-                            onClick = {
-                                val monto = montoAbono.toDoubleOrNull()
-                                if (monto != null && fechaAbono.isNotBlank()) {
-                                    try {
-                                        var credito = queries.obtenerCreditoPorCliente(cliente.id).executeAsOneOrNull()
-
-                                        if (credito == null) {
-                                            queries.insertarCredito(
-                                                cliente.id,
-                                                cliente.limite_credito,
-                                                cliente.limite_credito
-                                            )
-                                            credito = queries.obtenerCreditoPorCliente(cliente.id).executeAsOne()
-                                        }
-                                        queries.insertarAbono(credito.id, monto, fechaAbono)
-                                        abonosList = queries.obtenerAbonosPorCliente(cliente.id).executeAsList()
-
-                                        mostrarDialogoAbono = false
-                                        montoAbono = ""; fechaAbono = ""
-                                    } catch (e: Exception) {
-                                        println("Error al guardar abono: ${e.message}")
-                                    }
-                                }
-                            }
-                        ) {
-                            Text("Guardar")
-                        }
-                    },
-                    dismissButton = {
-                        TextButton(
-                            onClick = {
-                                mostrarDialogoAbono = false
-                                montoAbono = ""
-                                fechaAbono = ""
-                            }
-                        ) {
-                            Text("Cancelar")
-                        }
-                    }
+                val creditoDisponible = creditoActual?.saldo_pendiente ?: cliente.limite_credito
+                Text(
+                    text = "Límite de crédito: $$creditoDisponible",
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
                 )
             }
         }
+
+        Spacer(modifier = Modifier.height(16.dp))
+
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedButton(onClick = onImprimirPdf) { Text("Generar PDF") }
+            Button(onClick = { mostrarDialogoAbono = true }) { Text("Abonar") }
+            Button(onClick = { mostrarDialogoCredito = true }) { Text("Nuevo Crédito") }
+        }
+
+        if (accionesList.isNotEmpty()) {
+            Text("Acciones realizadas:", modifier = Modifier.padding(top = 16.dp), fontWeight = FontWeight.SemiBold)
+
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(top = 8.dp)) {
+                items(accionesList) { accion ->
+                    Card(modifier = Modifier.fillMaxWidth()) {
+                        Column(modifier = Modifier.padding(16.dp)) {
+                            Text("${accion.tipo}: $${accion.monto}", fontWeight = FontWeight.Bold)
+                            Text(text = accion.detalle, style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
+            }
+        }
+
+        if (mostrarDialogoAbono) {
+            AlertDialog(
+                onDismissRequest = { mostrarDialogoAbono = false },
+                title = { Text("Registrar Abono") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = montoAbono,
+                            onValueChange = {
+                                if (it.isEmpty() || it.matches(Regex("^\\d*\\.?\\d*$"))) {
+                                    montoAbono = it
+                                }
+                            },
+                            label = { Text("Monto del abono ($)") },
+                            singleLine = true
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            val monto = montoAbono.toDoubleOrNull()
+                            if (monto != null) {
+                                try {
+                                    var credito = queries.obtenerCreditoPorCliente(cliente.id).executeAsOneOrNull()
+
+                                    if (credito == null) {
+                                        queries.insertarCredito(
+                                            cliente.id,
+                                            cliente.limite_credito,
+                                            cliente.limite_credito
+                                        )
+                                        credito = queries.obtenerCreditoPorCliente(cliente.id).executeAsOne()
+                                    }
+
+                                    // --- CORRECCIÓN DE FECHA COMPATIBLE CON API 24 ---
+                                    val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
+                                    val fechaDispositivo = sdf.format(Date())
+
+                                    queries.insertarAbono(credito.id, monto, fechaDispositivo)
+                                    queries.actualizarSaldoPendiente(monto, credito.id)
+
+                                    creditoActual = queries.obtenerCreditoPorCliente(cliente.id).executeAsOneOrNull()
+                                    abonosList = queries.obtenerAbonosPorCliente(cliente.id).executeAsList()
+
+                                    mostrarDialogoAbono = false
+                                    montoAbono = ""
+                                } catch (e: Exception) {
+                                    println("Error al guardar abono: ${e.message}")
+                                }
+                            }
+                        }
+                    ) {
+                        Text("Guardar")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { mostrarDialogoAbono = false; montoAbono = "" }) {
+                        Text("Cancelar")
+                    }
+                }
+            )
+        }
+
+        if (mostrarDialogoCredito) {
+            AlertDialog(
+                onDismissRequest = { mostrarDialogoCredito = false },
+                title = { Text("Registrar Nuevo Crédito") },
+                text = {
+                    Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = montoCredito,
+                            onValueChange = {
+                                if (it.isEmpty() || it.matches(Regex("^\\d*\\.?\\d*$"))) {
+                                    montoCredito = it
+                                }
+                            },
+                            label = { Text("Monto del nuevo crédito ($)") },
+                            singleLine = true
+                        )
+                    }
+                },
+                confirmButton = {
+                    Button(
+                        onClick = {
+                            val monto = montoCredito.toDoubleOrNull()
+                            if (monto != null && monto > 0) {
+                                try {
+                                    var credito = queries.obtenerCreditoPorCliente(cliente.id).executeAsOneOrNull()
+
+                                    if (credito == null) {
+                                        queries.insertarCredito(cliente.id, monto, monto)
+                                    } else {
+                                        queries.acumularCredito(monto, monto, cliente.id)
+                                    }
+
+                                    creditoActual = queries.obtenerCreditoPorCliente(cliente.id).executeAsOneOrNull()
+
+                                    // --- CORRECCIÓN DE FECHA COMPATIBLE CON API 24 ---
+                                    val sdf = SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault())
+                                    val fechaDispositivo = sdf.format(Date())
+
+                                    creditosNuevosList = creditosNuevosList + AccionUI(
+                                        tipo = "Nuevo Crédito",
+                                        monto = monto,
+                                        detalle = "Fecha: $fechaDispositivo"
+                                    )
+
+                                    mostrarDialogoCredito = false
+                                    montoCredito = ""
+                                } catch (e: Exception) {
+                                    println("Error al añadir crédito: ${e.message}")
+                                }
+                            }
+                        }
+                    ) {
+                        Text("Guardar")
+                    }
+                },
+                dismissButton = {
+                    TextButton(onClick = { mostrarDialogoCredito = false; montoCredito = "" }) {
+                        Text("Cancelar")
+                    }
+                }
+            )
+        }
+    }
 }
+
 @Composable
 fun PantallaAgregar(
     onVolver: () -> Unit,
@@ -316,7 +399,6 @@ fun PantallaAgregar(
         Text("Nuevo Cliente", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
         Spacer(modifier = Modifier.height(20.dp))
 
-        // Nombre (Obligatorio)
         OutlinedTextField(
             value = nombre,
             onValueChange = { nombre = it; mostrarError = false },
@@ -327,7 +409,6 @@ fun PantallaAgregar(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Teléfono (Opcional)
         OutlinedTextField(
             value = telefono,
             onValueChange = { telefono = it },
@@ -338,7 +419,6 @@ fun PantallaAgregar(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Dirección (Opcional)
         OutlinedTextField(
             value = direccion,
             onValueChange = { direccion = it },
@@ -348,7 +428,6 @@ fun PantallaAgregar(
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // Límite de Crédito (Obligatorio)
         OutlinedTextField(
             value = limiteCredito,
             onValueChange = {
@@ -384,7 +463,6 @@ fun PantallaAgregar(
             Button(
                 onClick = {
                     val limite = limiteCredito.toDoubleOrNull()
-                    // Solo validamos Nombre y Límite
                     if (nombre.isNotBlank() && limite != null && limite > 0) {
                         onGuardar(nombre, telefono, direccion, limite)
                     } else {

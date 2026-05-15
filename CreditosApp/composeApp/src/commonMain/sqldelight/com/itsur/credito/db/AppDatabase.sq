@@ -62,3 +62,10 @@ actualizarSaldoPendiente:
 UPDATE Credito
 SET saldo_pendiente = saldo_pendiente - ?
 WHERE id = ?;
+
+--agregar nuevo credito
+acumularCredito:
+UPDATE Credito
+SET monto_prestado = monto_prestado + ?,
+    saldo_pendiente = saldo_pendiente + ?
+WHERE cliente_id = ?;
