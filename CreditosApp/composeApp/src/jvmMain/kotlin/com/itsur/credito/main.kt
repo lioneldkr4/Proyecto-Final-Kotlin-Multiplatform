@@ -2,8 +2,8 @@ package com.itsur.credito
 
 import androidx.compose.ui.window.Window
 import androidx.compose.ui.window.application
-import com.itsur.credito.App
 import com.itsur.credito.data.DatabaseDriverFactory
+import com.itsur.credito.data.PdfGenerator
 import com.itsur.credito.db.AppDatabase
 
 fun main() = application {
@@ -13,7 +13,8 @@ fun main() = application {
     ) {
         val driver = DatabaseDriverFactory().createDriver()
         val database = AppDatabase(driver)
+        val pdfGenerator = PdfGenerator()
 
-        App(database = database)
+        App(database = database, pdfGenerator = pdfGenerator)
     }
 }

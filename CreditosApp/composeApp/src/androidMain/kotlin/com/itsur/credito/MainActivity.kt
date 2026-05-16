@@ -4,6 +4,7 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import com.itsur.credito.data.DatabaseDriverFactory
+import com.itsur.credito.data.PdfGenerator
 import com.itsur.credito.db.AppDatabase
 
 class MainActivity : ComponentActivity() {
@@ -12,9 +13,10 @@ class MainActivity : ComponentActivity() {
 
         val driver = DatabaseDriverFactory(applicationContext).createDriver()
         val database = AppDatabase(driver)
+        val pdfGenerator = PdfGenerator(applicationContext)
 
         setContent {
-            App(database = database)
+            App(database = database, pdfGenerator = pdfGenerator)
         }
     }
 }
