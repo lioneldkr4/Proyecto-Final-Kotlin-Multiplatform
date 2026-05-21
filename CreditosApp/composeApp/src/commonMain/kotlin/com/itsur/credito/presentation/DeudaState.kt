@@ -1,11 +1,13 @@
 package com.itsur.credito.presentation
 
-import com.itsur.credito.db.Abono
-import com.itsur.credito.db.Cliente
-import com.itsur.credito.db.Credito
+import com.itsur.credito.domain.model.Abono
+import com.itsur.credito.domain.model.Cliente
+import com.itsur.credito.domain.model.Credito
+import com.itsur.credito.domain.model.EstadoCredito
+import com.itsur.credito.domain.model.TipoAbono
 
 enum class Pantalla {
-    Inicio, Detalles, AgregarCliente
+    Inicio, Detalles, AgregarCliente, EditarCliente
 }
 
 data class AccionUI(
@@ -21,5 +23,7 @@ data class AppUiState(
     val creditoActual: Credito? = null,
     val abonos: List<Abono> = emptyList(),
     val creditosNuevos: List<AccionUI> = emptyList(),
+    val tiposAbono: List<TipoAbono> = emptyList(),
+    val estadosCredito: List<EstadoCredito> = emptyList(),
     val error: String? = null
 )

@@ -1,3 +1,17 @@
+-- ============ CATÁLOGOS ============
+
+CREATE TABLE EstadoCredito (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    nombre TEXT NOT NULL UNIQUE
+);
+
+CREATE TABLE TipoAbono (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    nombre TEXT NOT NULL UNIQUE
+);
+
+-- ============ TABLAS PRINCIPALES ============
+
 CREATE TABLE Cliente (
     id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
     nombre TEXT NOT NULL,
@@ -11,7 +25,9 @@ CREATE TABLE Credito (
     cliente_id INTEGER NOT NULL,
     monto_prestado REAL NOT NULL,
     saldo_pendiente REAL NOT NULL,
-    FOREIGN KEY (cliente_id) REFERENCES Cliente(id)
+    estado_id INTEGER NOT NULL DEFAULT 1,
+    FOREIGN KEY (cliente_id) REFERENCES Cliente(id),
+    FOREIGN KEY (estado_id) REFERENCES EstadoCredito(id)
 );
 
 CREATE TABLE Abono (
@@ -19,26 +35,90 @@ CREATE TABLE Abono (
     credito_id INTEGER NOT NULL,
     monto_abonado REAL NOT NULL,
     fecha TEXT NOT NULL,
-    FOREIGN KEY (credito_id) REFERENCES Credito(id)
+    tipo_id INTEGER NOT NULL DEFAULT 1,
+    FOREIGN KEY (credito_id) REFERENCES Credito(id),
+    FOREIGN KEY (tipo_id) REFERENCES TipoAbono(id)
 );
 
+-- ============ PRE-POBLACIÓN DE CATÁLOGOS ============
 
--- Consulta para tu búsqueda por nombre (sin los ||)
+poblarEstadosCredito:
+INSERT OR IGNORE INTO EstadoCredito(id, nombre)
+SELECT 1, 'Activo' UNION ALL SELECT 2, 'Liquidado' UNION ALL SELECT 3, 'Vencido';
+
+poblarTiposAbono:
+INSERT OR IGNORE INTO TipoAbono(id, nombre)
+SELECT 1, 'Efectivo' UNION ALL SELECT 2, 'Transferencia' UNION ALL SELECT 3, 'Cheque';
+
+-- ============ SELECT CATÁLOGOS ============
+
+obtenerEstadosCredito:
+SELECT * FROM EstadoCredito;
+
+obtenerTiposAbono:
+SELECT * FROM TipoAbono;
+
+-- ============ CRUD CLIENTE ============
+
+insertarCliente:
+INSERT INTO Cliente(nombre, telefono, direccion, limite_credito)
+VALUES (?, ?, ?, ?);
+
+obtenerTodosLosClientes:
+SELECT * FROM Cliente;
+
+buscarClientesGenerales:
+SELECT * FROM Cliente WHERE nombre LIKE ?;
+
 buscarClientePorNombre:
 SELECT Cliente.nombre, Cliente.limite_credito, Credito.saldo_pendiente
 FROM Cliente
 JOIN Credito ON Cliente.id = Credito.cliente_id
 WHERE Cliente.nombre LIKE ?;
-insertarCliente:
-INSERT INTO Cliente(nombre, telefono, direccion, limite_credito)
-VALUES (?, ?, ?, ?);
-buscarClientesGenerales:
-SELECT * FROM Cliente WHERE nombre LIKE ?;
 
--- Guardar cambios
-insertarAbono:
-INSERT INTO Abono(credito_id, monto_abonado, fecha)
+actualizarCliente:
+UPDATE Cliente
+SET nombre = ?, telefono = ?, direccion = ?, limite_credito = ?
+WHERE id = ?;
+
+eliminarCliente:
+DELETE FROM Cliente WHERE id = ?;
+
+-- ============ CRUD CRÉDITO ============
+
+insertarCredito:
+INSERT INTO Credito(cliente_id, monto_prestado, saldo_pendiente)
 VALUES (?, ?, ?);
+
+obtenerCreditoPorCliente:
+SELECT * FROM Credito WHERE cliente_id = ?;
+
+actualizarSaldoPendiente:
+UPDATE Credito
+SET saldo_pendiente = saldo_pendiente - ?
+WHERE id = ?;
+
+acumularCredito:
+UPDATE Credito
+SET monto_prestado = monto_prestado + ?,
+    saldo_pendiente = saldo_pendiente + ?,
+    estado_id = 1
+WHERE cliente_id = ?;
+
+liquidarCredito:
+UPDATE Credito
+SET saldo_pendiente = 0,
+    estado_id = 2
+WHERE cliente_id = ?;
+
+eliminarCredito:
+DELETE FROM Credito WHERE id = ?;
+
+-- ============ CRUD ABONO ============
+
+insertarAbono:
+INSERT INTO Abono(credito_id, monto_abonado, fecha, tipo_id)
+VALUES (?, ?, ?, ?);
 
 obtenerAbonosPorCliente:
 SELECT Abono.*
@@ -46,26 +126,8 @@ FROM Abono
 JOIN Credito ON Abono.credito_id = Credito.id
 WHERE Credito.cliente_id = ?;
 
-obtenerCreditoPorCliente:
-SELECT * FROM Credito WHERE cliente_id = ?;
+eliminarAbono:
+DELETE FROM Abono WHERE id = ?;
 
-insertarCredito:
-INSERT INTO Credito(cliente_id, monto_prestado, saldo_pendiente)
-VALUES (?, ?, ?);
-
--- Guardar aunque se cierre
-obtenerTodosLosClientes:
-SELECT * FROM Cliente;
-
--- actualizar creditos
-actualizarSaldoPendiente:
-UPDATE Credito
-SET saldo_pendiente = saldo_pendiente - ?
-WHERE id = ?;
-
---agregar nuevo credito
-acumularCredito:
-UPDATE Credito
-SET monto_prestado = monto_prestado + ?,
-    saldo_pendiente = saldo_pendiente + ?
-WHERE cliente_id = ?;
+eliminarAbonosPorCredito:
+DELETE FROM Abono WHERE credito_id = ?;

@@ -21,6 +21,7 @@ kotlin {
             implementation(libs.compose.uiToolingPreview)
             implementation(libs.androidx.activity.compose)
             implementation(libs.sqldelight.android.driver)
+            implementation("com.google.zxing:core:3.5.3")
         }
         commonMain.dependencies {
             implementation(libs.compose.runtime)
@@ -41,6 +42,7 @@ kotlin {
             implementation(compose.desktop.currentOs)
             implementation(libs.kotlinx.coroutinesSwing)
             implementation(libs.sqldelight.sqlite.driver)
+            implementation("com.google.zxing:core:3.5.3")
         }
     }
 }
