@@ -43,6 +43,7 @@ fun AppNavigation(viewModel: AppViewModel) {
         composable(Routes.INICIO) {
             PantallaCobranza(
                 clientes = uiState.clientes,
+                dashboardStats = uiState.dashboardStats,
                 onBuscar = viewModel::buscarClientes,
                 onVerMasClick = viewModel::navegarADetalles,
                 onNuevoClienteClick = viewModel::navegarAAgregarCliente
@@ -64,7 +65,7 @@ fun AppNavigation(viewModel: AppViewModel) {
                     onRegistrarAbono = { creditoId, monto, tipoId ->
                         viewModel.registrarAbono(creditoId, monto, tipoId)
                     },
-                    onRegistrarCredito = viewModel::registrarNuevoCredito,
+                    onRegistrarCredito = { monto, fechaStr -> viewModel.registrarNuevoCredito(monto, fechaStr) },
                     onLiquidarCredito = viewModel::liquidarCredito,
                     onEliminar = { viewModel.eliminarCliente(cliente.id) }
                 )

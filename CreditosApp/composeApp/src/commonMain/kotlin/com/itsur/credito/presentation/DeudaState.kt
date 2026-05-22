@@ -3,6 +3,7 @@ package com.itsur.credito.presentation
 import com.itsur.credito.domain.model.Abono
 import com.itsur.credito.domain.model.Cliente
 import com.itsur.credito.domain.model.Credito
+import com.itsur.credito.domain.model.DashboardStats
 import com.itsur.credito.domain.model.EstadoCredito
 import com.itsur.credito.domain.model.TipoAbono
 
@@ -18,5 +19,6 @@ data class AppUiState(
     val abonos: List<Abono> = emptyList(),
     val tiposAbono: List<TipoAbono> = emptyList(),
     val estadosCredito: List<EstadoCredito> = emptyList(),
+    val dashboardStats: DashboardStats? = null,
     val error: String? = null
 )

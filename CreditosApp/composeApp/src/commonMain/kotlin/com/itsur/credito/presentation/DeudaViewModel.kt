@@ -2,7 +2,9 @@ package com.itsur.credito.presentation
 
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.itsur.credito.data.AccionPdf
+import com.itsur.credito.data.AbonoExport
+import com.itsur.credito.data.CreditoExport
+import com.itsur.credito.data.EstadoCuentaExport
 import com.itsur.credito.data.ExcelGenerator
 import com.itsur.credito.data.PdfGenerator
 import com.itsur.credito.domain.model.Cliente
@@ -29,6 +31,7 @@ class AppViewModel(
     init {
         cargarTodosLosClientes()
         cargarCatalogos()
+        cargarEstadisticas()
     }
 
     private fun cargarCatalogos() {
@@ -45,6 +48,17 @@ class AppViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             runCatching { repository.obtenerTodos() }
                 .onSuccess { clientes -> _uiState.update { it.copy(clientes = clientes) } }
+                .onFailure { e -> _uiState.update { it.copy(error = e.message) } }
+        }
+    }
+
+    fun cargarEstadisticas() {
+        viewModelScope.launch(Dispatchers.IO) {
+            runCatching {
+                repository.marcarCreditosVencidos()
+                repository.obtenerEstadisticas()
+            }
+                .onSuccess { stats -> _uiState.update { it.copy(dashboardStats = stats) } }
                 .onFailure { e -> _uiState.update { it.copy(error = e.message) } }
         }
     }
@@ -116,6 +130,7 @@ class AppViewModel(
             )
         }
         cargarTodosLosClientes()
+        cargarEstadisticas()
     }
 
     fun agregarCliente(nombre: String, telefono: String, direccion: String, limite: Double) {
@@ -158,11 +173,12 @@ class AppViewModel(
         }
     }
 
-    fun registrarNuevoCredito(monto: Double) {
+    fun registrarNuevoCredito(monto: Double, fechaVencimientoStr: String = "") {
         val cliente = _uiState.value.clienteSeleccionado ?: return
+        val fechaIso = parsearFechaVencimiento(fechaVencimientoStr)
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
-                repository.registrarNuevoCredito(cliente.id, monto, cliente.limiteCredito)
+                repository.registrarNuevoCredito(cliente.id, monto, cliente.limiteCredito, fechaIso)
                 Pair(
                     repository.obtenerCreditosPorCliente(cliente.id),
                     repository.obtenerAbonosPorCliente(cliente.id)
@@ -194,54 +210,56 @@ class AppViewModel(
 
     fun generarPdf() {
         val estado = _uiState.value
-        val cliente = estado.clienteSeleccionado ?: return
-
-        val saldoTotal = estado.creditos.filter { it.estadoId == 1L }.sumOf { it.saldoPendiente }
-
-        val acciones = estado.creditos.map { c ->
-            AccionPdf("Crédito #${c.id}", c.montoPrestado, "Saldo: ${"%.2f".format(c.saldoPendiente)}")
-        } + estado.abonos.map { a ->
-            AccionPdf("Abono", a.montoAbonado, a.fecha)
-        }
-
+        if (estado.clienteSeleccionado == null) return
+        val export = construirEstadoCuenta(estado)
         viewModelScope.launch(Dispatchers.IO) {
-            runCatching {
-                pdfGenerator.generarPdf(
-                    nombre = cliente.nombre,
-                    telefono = cliente.telefono,
-                    direccion = cliente.direccion,
-                    limiteCredito = cliente.limiteCredito,
-                    saldoPendiente = saldoTotal.takeIf { it > 0 },
-                    acciones = acciones
-                )
-            }.onFailure { e -> _uiState.update { it.copy(error = e.message) } }
+            runCatching { pdfGenerator.generarPdf(export) }
+                .onFailure { e -> _uiState.update { it.copy(error = e.message) } }
         }
     }
 
     fun generarExcel() {
         val estado = _uiState.value
-        val cliente = estado.clienteSeleccionado ?: return
-
-        val saldoTotal = estado.creditos.filter { it.estadoId == 1L }.sumOf { it.saldoPendiente }
-
-        val acciones = estado.creditos.map { c ->
-            AccionPdf("Crédito #${c.id}", c.montoPrestado, "Saldo: ${"%.2f".format(c.saldoPendiente)}")
-        } + estado.abonos.map { a ->
-            AccionPdf("Abono", a.montoAbonado, a.fecha)
-        }
-
+        if (estado.clienteSeleccionado == null) return
+        val export = construirEstadoCuenta(estado)
         viewModelScope.launch(Dispatchers.IO) {
-            runCatching {
-                excelGenerator.generarExcel(
-                    nombre = cliente.nombre,
-                    telefono = cliente.telefono,
-                    direccion = cliente.direccion,
-                    limiteCredito = cliente.limiteCredito,
-                    saldoPendiente = saldoTotal.takeIf { it > 0 },
-                    acciones = acciones
-                )
-            }.onFailure { e -> _uiState.update { it.copy(error = e.message) } }
+            runCatching { excelGenerator.generarExcel(export) }
+                .onFailure { e -> _uiState.update { it.copy(error = e.message) } }
         }
+    }
+
+    private fun construirEstadoCuenta(estado: AppUiState): EstadoCuentaExport {
+        val cliente = estado.clienteSeleccionado!!
+        val creditoUtilizado = estado.creditos.filter { it.estadoId == 1L }.sumOf { it.saldoPendiente }
+        val totalAbonado = estado.abonos.sumOf { it.montoAbonado }
+
+        val creditosExport = estado.creditos.map { c ->
+            val estadoNombre = estado.estadosCredito.find { it.id == c.estadoId }?.nombre ?: ""
+            val abonosDelCredito = estado.abonos.filter { it.creditoId == c.id }.map { a ->
+                val tipoNombre = estado.tiposAbono.find { it.id == a.tipoId }?.nombre ?: ""
+                AbonoExport(monto = a.montoAbonado, fecha = a.fecha, tipoNombre = tipoNombre)
+            }
+            CreditoExport(
+                id = c.id,
+                estadoNombre = estadoNombre,
+                montoPrestado = c.montoPrestado,
+                saldoPendiente = c.saldoPendiente,
+                fechaVencimiento = c.fechaVencimiento,
+                abonos = abonosDelCredito
+            )
+        }
+
+        return EstadoCuentaExport(
+            nombre = cliente.nombre,
+            telefono = cliente.telefono,
+            direccion = cliente.direccion,
+            limiteCredito = cliente.limiteCredito,
+            creditoUtilizado = creditoUtilizado,
+            creditoDisponible = cliente.limiteCredito - creditoUtilizado,
+            totalAbonado = totalAbonado,
+            creditos = creditosExport,
+            fechaGeneracion = obtenerFecha()
+        )
     }
 
     fun limpiarError() {
@@ -251,6 +269,7 @@ class AppViewModel(
     private fun cargarDetallesCliente(clienteId: Long) {
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
+                repository.marcarCreditosVencidos()
                 Pair(
                     repository.obtenerCreditosPorCliente(clienteId),
                     repository.obtenerAbonosPorCliente(clienteId)
@@ -265,4 +284,16 @@ class AppViewModel(
 
     private fun obtenerFecha(): String =
         SimpleDateFormat("dd/MM/yyyy HH:mm", Locale.getDefault()).format(Date())
+
+    private fun parsearFechaVencimiento(fechaStr: String): String? {
+        if (fechaStr.isBlank()) return null
+        return try {
+            val input = SimpleDateFormat("dd/MM/yyyy", Locale.getDefault())
+            input.isLenient = false
+            val date = input.parse(fechaStr) ?: return null
+            SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(date)
+        } catch (e: Exception) {
+            null
+        }
+    }
 }

@@ -3,10 +3,14 @@ package com.itsur.credito.domain.repository
 import com.itsur.credito.domain.model.Abono
 import com.itsur.credito.domain.model.Cliente
 import com.itsur.credito.domain.model.Credito
+import com.itsur.credito.domain.model.DashboardStats
 import com.itsur.credito.domain.model.EstadoCredito
 import com.itsur.credito.domain.model.TipoAbono
 
 interface ClienteRepository {
+
+    // Dashboard
+    fun obtenerEstadisticas(): DashboardStats
 
     // Catálogos
     fun obtenerEstadosCredito(): List<EstadoCredito>
@@ -21,8 +25,9 @@ interface ClienteRepository {
 
     // Crédito — múltiples disposiciones por cliente
     fun obtenerCreditosPorCliente(clienteId: Long): List<Credito>
-    fun registrarNuevoCredito(clienteId: Long, monto: Double, limiteCredito: Double): Credito?
+    fun registrarNuevoCredito(clienteId: Long, monto: Double, limiteCredito: Double, fechaVencimiento: String?): Credito?
     fun liquidarCredito(creditoId: Long)
+    fun marcarCreditosVencidos()
 
     // Abono — aplica a un crédito específico
     fun obtenerAbonosPorCliente(clienteId: Long): List<Abono>

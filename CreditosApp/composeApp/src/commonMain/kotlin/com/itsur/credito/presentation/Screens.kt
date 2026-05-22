@@ -11,6 +11,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
@@ -18,84 +19,169 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import com.itsur.credito.data.generarQrImageBitmap
 import com.itsur.credito.domain.model.Abono
 import com.itsur.credito.domain.model.Cliente
 import com.itsur.credito.domain.model.Credito
+import com.itsur.credito.domain.model.DashboardStats
 import com.itsur.credito.domain.model.EstadoCredito
 import com.itsur.credito.domain.model.TipoAbono
 
 @Composable
 fun PantallaCobranza(
     clientes: List<Cliente>,
+    dashboardStats: DashboardStats?,
     onBuscar: (String) -> Unit,
     onVerMasClick: (Cliente) -> Unit,
     onNuevoClienteClick: () -> Unit
 ) {
     var nombreBusqueda by remember { mutableStateOf("") }
 
-    Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
-        Text("Gestión de Créditos", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-        Spacer(modifier = Modifier.height(16.dp))
-
-        OutlinedTextField(
-            value = nombreBusqueda,
-            onValueChange = { nombreBusqueda = it },
-            label = { Text("Nombre del cliente") },
-            modifier = Modifier.fillMaxWidth(),
-            singleLine = true
-        )
-
-        Row(
-            modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
-        ) {
-            Button(
-                onClick = { onBuscar(nombreBusqueda) },
-                modifier = Modifier.weight(1f)
-            ) { Text("Buscar") }
+    LazyColumn(
+        modifier = Modifier.fillMaxSize(),
+        contentPadding = PaddingValues(horizontal = 24.dp, vertical = 20.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        // ── Encabezado ───────────────────────────────────────────────────────
+        item {
+            Text(
+                "Gestión de Créditos",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold
+            )
         }
 
-        Spacer(modifier = Modifier.height(24.dp))
-
-        Button(
-            onClick = onNuevoClienteClick,
-            modifier = Modifier.padding(top = 8.dp)
-        ) {
-            Text("Nuevo Cliente")
-        }
-
-        Spacer(modifier = Modifier.height(24.dp))
-
-        if (clientes.isEmpty()) {
-            Text("No se encontraron clientes.", color = Color.Gray)
-        } else {
-            Text("Clientes:", fontWeight = FontWeight.Bold)
-            Spacer(modifier = Modifier.height(8.dp))
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(clientes) { cliente ->
+        // ── Dashboard ────────────────────────────────────────────────────────
+        if (dashboardStats != null) {
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TarjetaStat(
+                        titulo = "Clientes",
+                        valor = "${dashboardStats.totalClientes}",
+                        modifier = Modifier.weight(1f)
+                    )
+                    TarjetaStat(
+                        titulo = "Activos",
+                        valor = "${dashboardStats.creditosActivos}",
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    TarjetaStat(
+                        titulo = "Vencidos",
+                        valor = "${dashboardStats.creditosVencidos}",
+                        color = if (dashboardStats.creditosVencidos > 0)
+                            MaterialTheme.colorScheme.error else Color.Gray,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+            item {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)
+                ) {
+                    TarjetaStat(
+                        titulo = "Total prestado",
+                        valor = "$${"%,.0f".format(dashboardStats.totalPrestado)}",
+                        modifier = Modifier.weight(1f)
+                    )
+                    TarjetaStat(
+                        titulo = "Por cobrar",
+                        valor = "$${"%,.0f".format(dashboardStats.totalPendiente)}",
+                        color = MaterialTheme.colorScheme.primary,
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+            }
+            if (dashboardStats.topDeudores.isNotEmpty()) {
+                item {
                     Card(
                         modifier = Modifier.fillMaxWidth(),
-                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surfaceVariant
+                        )
                     ) {
                         Column(modifier = Modifier.padding(16.dp)) {
                             Text(
-                                "Nombre: ${cliente.nombre}",
-                                fontWeight = FontWeight.Bold,
-                                style = MaterialTheme.typography.titleMedium
+                                "Top deudores",
+                                style = MaterialTheme.typography.titleSmall,
+                                fontWeight = FontWeight.SemiBold
                             )
-                            Spacer(modifier = Modifier.height(4.dp))
-                            Text(
-                                "Límite Autorizado: $${cliente.limiteCredito}",
-                                color = MaterialTheme.colorScheme.primary
-                            )
-                            TextButton(
-                                onClick = { onVerMasClick(cliente) },
-                                modifier = Modifier.align(Alignment.End).padding(top = 8.dp)
-                            ) {
-                                Text("Ver cuenta ->")
-                            }
+                            Spacer(Modifier.height(12.dp))
+                            GraficaBarrasDeudores(deudores = dashboardStats.topDeudores)
+                        }
+                    }
+                }
+            }
+            item { HorizontalDivider() }
+        }
+
+        // ── Búsqueda y nuevo cliente ─────────────────────────────────────────
+        item {
+            OutlinedTextField(
+                value = nombreBusqueda,
+                onValueChange = { nombreBusqueda = it },
+                label = { Text("Buscar cliente") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true
+            )
+        }
+        item {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = { onBuscar(nombreBusqueda) },
+                    modifier = Modifier.weight(1f)
+                ) { Text("Buscar") }
+                Button(
+                    onClick = onNuevoClienteClick,
+                    modifier = Modifier.weight(1f)
+                ) { Text("Nuevo Cliente") }
+            }
+        }
+
+        // ── Lista de clientes ─────────────────────────────────────────────────
+        if (clientes.isEmpty()) {
+            item { Text("No se encontraron clientes.", color = Color.Gray) }
+        } else {
+            item {
+                Text(
+                    "Clientes (${clientes.size})",
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleSmall
+                )
+            }
+            items(clientes) { cliente ->
+                Card(
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.surfaceVariant
+                    )
+                ) {
+                    Column(modifier = Modifier.padding(16.dp)) {
+                        Text(
+                            cliente.nombre,
+                            fontWeight = FontWeight.Bold,
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                        Spacer(modifier = Modifier.height(4.dp))
+                        Text(
+                            "Límite: $${"%,.2f".format(cliente.limiteCredito)}",
+                            color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        TextButton(
+                            onClick = { onVerMasClick(cliente) },
+                            modifier = Modifier.align(Alignment.End)
+                        ) {
+                            Text("Ver cuenta ->")
                         }
                     }
                 }
@@ -117,7 +203,7 @@ fun PantallaDetalles(
     onImprimirPdf: () -> Unit,
     onGenerarExcel: () -> Unit,
     onRegistrarAbono: (creditoId: Long, monto: Double, tipoId: Long) -> Unit,
-    onRegistrarCredito: (Double) -> Unit,
+    onRegistrarCredito: (monto: Double, fechaVencimiento: String) -> Unit,
     onLiquidarCredito: (creditoId: Long) -> Unit,
     onEliminar: () -> Unit
 ) {
@@ -129,6 +215,8 @@ fun PantallaDetalles(
     var mostrarDialogoCredito by remember { mutableStateOf(false) }
     var montoCredito by remember { mutableStateOf("") }
     var errorCreditoDisponible by remember { mutableStateOf(false) }
+    var fechaVencimientoStr by remember { mutableStateOf("") }
+    var errorFechaVencimiento by remember { mutableStateOf(false) }
 
     var mostrarDialogoEliminar by remember { mutableStateOf(false) }
     var mostrarQr by remember { mutableStateOf(false) }
@@ -379,6 +467,8 @@ fun PantallaDetalles(
                 mostrarDialogoCredito = false
                 montoCredito = ""
                 errorCreditoDisponible = false
+                fechaVencimientoStr = ""
+                errorFechaVencimiento = false
             },
             title = { Text("Nuevo Crédito") },
             text = {
@@ -407,19 +497,44 @@ fun PantallaDetalles(
                             style = MaterialTheme.typography.bodySmall
                         )
                     }
+                    OutlinedTextField(
+                        value = fechaVencimientoStr,
+                        onValueChange = {
+                            if (it.length <= 10) {
+                                fechaVencimientoStr = it
+                                errorFechaVencimiento = false
+                            }
+                        },
+                        label = { Text("Fecha de vencimiento (Opcional)") },
+                        placeholder = { Text("dd/MM/yyyy") },
+                        singleLine = true,
+                        isError = errorFechaVencimiento
+                    )
+                    if (errorFechaVencimiento) {
+                        Text(
+                            text = "Formato inválido. Use dd/MM/yyyy.",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
                 }
             },
             confirmButton = {
                 Button(onClick = {
                     val monto = montoCredito.toDoubleOrNull()
+                    val fechaValida = fechaVencimientoStr.isBlank() ||
+                        fechaVencimientoStr.matches(Regex("^\\d{2}/\\d{2}/\\d{4}$"))
                     when {
                         monto == null || monto <= 0 -> {}
                         monto > creditoDisponible -> errorCreditoDisponible = true
+                        !fechaValida -> errorFechaVencimiento = true
                         else -> {
-                            onRegistrarCredito(monto)
+                            onRegistrarCredito(monto, fechaVencimientoStr)
                             mostrarDialogoCredito = false
                             montoCredito = ""
                             errorCreditoDisponible = false
+                            fechaVencimientoStr = ""
+                            errorFechaVencimiento = false
                         }
                     }
                 }) { Text("Guardar") }
@@ -429,6 +544,8 @@ fun PantallaDetalles(
                     mostrarDialogoCredito = false
                     montoCredito = ""
                     errorCreditoDisponible = false
+                    fechaVencimientoStr = ""
+                    errorFechaVencimiento = false
                 }) { Text("Cancelar") }
             }
         )
@@ -440,8 +557,16 @@ fun PantallaDetalles(
             append("CREDITO_APP\n")
             append("ID: ${cliente.id}\n")
             append("Nombre: ${cliente.nombre}\n")
-            append("Límite: $${cliente.limiteCredito}\n")
-            append("Disponible: $${"%,.2f".format(creditoDisponible)}")
+            cliente.telefono?.let { append("Tel: $it\n") }
+            cliente.direccion?.let { append("Dir: $it\n") }
+            append("Limite: $${"%,.2f".format(cliente.limiteCredito)}\n")
+            append("Utilizado: $${"%,.2f".format(creditoUsado)}\n")
+            append("Disponible: $${"%,.2f".format(creditoDisponible)}\n")
+            val activos = creditos.count { it.estadoId == 1L }
+            val vencidos = creditos.count { it.estadoId == 3L }
+            append("Creditos activos: $activos\n")
+            if (vencidos > 0) append("Creditos vencidos: $vencidos\n")
+            append("Total adeudado: $${"%,.2f".format(creditoUsado)}")
         }
         val qrBitmap: ImageBitmap = remember(cliente.id) { generarQrImageBitmap(qrTexto) }
         AlertDialog(
@@ -602,6 +727,26 @@ private fun TarjetaCredito(
                 color = Color(0xFF4CAF50),
                 trackColor = MaterialTheme.colorScheme.surfaceVariant
             )
+
+            credito.fechaVencimiento?.let { isoFecha ->
+                val partes = isoFecha.split("-")
+                val fechaDisplay = if (partes.size == 3) "${partes[2]}/${partes[1]}/${partes[0]}" else isoFecha
+                val colorFecha = if (credito.estadoId == 3L) MaterialTheme.colorScheme.error else Color.Gray
+                Spacer(modifier = Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        "Vencimiento: ",
+                        style = MaterialTheme.typography.labelSmall,
+                        color = Color.Gray
+                    )
+                    Text(
+                        fechaDisplay,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.SemiBold,
+                        color = colorFecha
+                    )
+                }
+            }
 
             if (abonos.isNotEmpty()) {
                 Spacer(modifier = Modifier.height(8.dp))
@@ -837,6 +982,152 @@ fun PantallaAgregar(
                 modifier = Modifier.weight(1f)
             ) {
                 Text("Guardar")
+            }
+        }
+    }
+}
+
+@Composable
+private fun GraficaDona(
+    utilizado: Double,
+    limite: Double,
+    modifier: Modifier = Modifier
+) {
+    val progreso = if (limite > 0) (utilizado / limite).toFloat().coerceIn(0f, 1f) else 0f
+
+    val colorUsado = when {
+        progreso >= 0.9f -> Color(0xFFE53935)
+        progreso >= 0.7f -> Color(0xFFF57C00)
+        else -> MaterialTheme.colorScheme.primary
+    }
+    val colorDisponible = Color(0xFF4CAF50)
+
+    Box(
+        contentAlignment = Alignment.Center,
+        modifier = modifier
+    ) {
+        Canvas(modifier = Modifier.fillMaxSize()) {
+            val grosor = size.minDimension * 0.18f
+            val radio = size.minDimension / 2f - grosor / 2f
+            val centro = Offset(size.width / 2f, size.height / 2f)
+            val topLeft = Offset(centro.x - radio, centro.y - radio)
+            val arcSize = Size(radio * 2f, radio * 2f)
+            val estilo = Stroke(width = grosor, cap = StrokeCap.Butt)
+
+            // Fondo: disponible (arco completo verde)
+            drawArc(
+                color = colorDisponible,
+                startAngle = -90f,
+                sweepAngle = 360f,
+                useCenter = false,
+                topLeft = topLeft,
+                size = arcSize,
+                style = estilo
+            )
+
+            // Encima: utilizado
+            if (progreso > 0f) {
+                drawArc(
+                    color = colorUsado,
+                    startAngle = -90f,
+                    sweepAngle = 360f * progreso,
+                    useCenter = false,
+                    topLeft = topLeft,
+                    size = arcSize,
+                    style = estilo
+                )
+            }
+        }
+
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            Text(
+                text = "${"%.0f".format(progreso * 100)}%",
+                style = MaterialTheme.typography.bodyMedium,
+                fontWeight = FontWeight.Bold,
+                color = if (progreso == 0f) colorDisponible else colorUsado
+            )
+            Text(
+                text = "usado",
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.Gray
+            )
+        }
+    }
+}
+
+@Composable
+private fun TarjetaStat(
+    titulo: String,
+    valor: String,
+    modifier: Modifier = Modifier,
+    color: Color = Color.Unspecified
+) {
+    Card(
+        modifier = modifier,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
+    ) {
+        Column(
+            modifier = Modifier.padding(12.dp).fillMaxWidth(),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            Text(
+                text = titulo,
+                style = MaterialTheme.typography.labelSmall,
+                color = Color.Gray,
+                textAlign = TextAlign.Center
+            )
+            Spacer(Modifier.height(4.dp))
+            Text(
+                text = valor,
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+                color = color,
+                textAlign = TextAlign.Center,
+                maxLines = 1
+            )
+        }
+    }
+}
+
+@Composable
+private fun GraficaBarrasDeudores(
+    deudores: List<Pair<String, Double>>,
+    modifier: Modifier = Modifier
+) {
+    val max = deudores.maxOfOrNull { it.second }?.takeIf { it > 0 } ?: 1.0
+    val barColor = MaterialTheme.colorScheme.primary
+    val trackColor = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.08f)
+
+    Column(modifier = modifier, verticalArrangement = Arrangement.spacedBy(10.dp)) {
+        deudores.forEach { (nombre, deuda) ->
+            val progreso = (deuda / max).toFloat().coerceIn(0f, 1f)
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = if (nombre.length > 18) nombre.take(17) + "…" else nombre,
+                        style = MaterialTheme.typography.bodySmall,
+                        maxLines = 1
+                    )
+                    Text(
+                        text = "$${"%,.2f".format(deuda)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        fontWeight = FontWeight.SemiBold
+                    )
+                }
+                Canvas(modifier = Modifier.fillMaxWidth().height(12.dp)) {
+                    val r = CornerRadius(size.height / 2)
+                    drawRoundRect(color = trackColor, size = size, cornerRadius = r)
+                    if (progreso > 0f) {
+                        drawRoundRect(
+                            color = barColor,
+                            size = Size(size.width * progreso, size.height),
+                            cornerRadius = r
+                        )
+                    }
+                }
             }
         }
     }

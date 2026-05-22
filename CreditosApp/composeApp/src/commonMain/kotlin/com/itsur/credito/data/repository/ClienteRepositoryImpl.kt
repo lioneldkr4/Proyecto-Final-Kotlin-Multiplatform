@@ -4,6 +4,7 @@ import com.itsur.credito.db.AppDatabase
 import com.itsur.credito.domain.model.Abono
 import com.itsur.credito.domain.model.Cliente
 import com.itsur.credito.domain.model.Credito
+import com.itsur.credito.domain.model.DashboardStats
 import com.itsur.credito.domain.model.EstadoCredito
 import com.itsur.credito.domain.model.TipoAbono
 import com.itsur.credito.domain.repository.ClienteRepository
@@ -17,6 +18,26 @@ class ClienteRepositoryImpl(private val database: AppDatabase) : ClienteReposito
             queries.poblarEstadosCredito()
             queries.poblarTiposAbono()
         }
+    }
+
+    // ── Dashboard ─────────────────────────────────────────────────────────────
+
+    override fun obtenerEstadisticas(): DashboardStats {
+        val totalClientes = queries.obtenerTotalClientes().executeAsOne()
+        val creditosActivos = queries.contarCreditosActivos().executeAsOne()
+        val creditosVencidos = queries.contarCreditosVencidos().executeAsOne()
+        val totalPrestado = queries.sumarTotalPrestado().executeAsOne().SUM ?: 0.0
+        val totalPendiente = queries.sumarTotalPendiente().executeAsOne().SUM ?: 0.0
+        val topDeudores = queries.obtenerTopDeudores().executeAsList()
+            .map { Pair(it.nombre, it.deuda_total ?: 0.0) }
+        return DashboardStats(
+            totalClientes = totalClientes,
+            creditosActivos = creditosActivos,
+            creditosVencidos = creditosVencidos,
+            totalPrestado = totalPrestado,
+            totalPendiente = totalPendiente,
+            topDeudores = topDeudores
+        )
     }
 
     // ── Catálogos ────────────────────────────────────────────────────────────
@@ -59,7 +80,7 @@ class ClienteRepositoryImpl(private val database: AppDatabase) : ClienteReposito
     override fun obtenerCreditosPorCliente(clienteId: Long): List<Credito> =
         queries.obtenerCreditosPorCliente(clienteId).executeAsList().map { it.toDomain() }
 
-    override fun registrarNuevoCredito(clienteId: Long, monto: Double, limiteCredito: Double): Credito? {
+    override fun registrarNuevoCredito(clienteId: Long, monto: Double, limiteCredito: Double, fechaVencimiento: String?): Credito? {
         database.transaction {
             val saldoUsado = queries.obtenerCreditosPorCliente(clienteId)
                 .executeAsList()
@@ -69,13 +90,17 @@ class ClienteRepositoryImpl(private val database: AppDatabase) : ClienteReposito
             if (monto > disponible) {
                 throw IllegalStateException("El monto $${"%.2f".format(monto)} supera el crédito disponible $${"%.2f".format(disponible)}")
             }
-            queries.insertarCredito(clienteId, monto, monto)
+            queries.insertarCredito(clienteId, monto, monto, fechaVencimiento)
         }
         return queries.obtenerCreditosPorCliente(clienteId).executeAsList().firstOrNull()?.toDomain()
     }
 
     override fun liquidarCredito(creditoId: Long) {
         queries.liquidarCredito(creditoId)
+    }
+
+    override fun marcarCreditosVencidos() {
+        queries.marcarCreditosVencidos()
     }
 
     // ── Abono ─────────────────────────────────────────────────────────────────
@@ -122,7 +147,8 @@ class ClienteRepositoryImpl(private val database: AppDatabase) : ClienteReposito
         clienteId = cliente_id,
         montoPrestado = monto_prestado,
         saldoPendiente = saldo_pendiente,
-        estadoId = estado_id
+        estadoId = estado_id,
+        fechaVencimiento = fecha_vencimiento
     )
 
     private fun com.itsur.credito.db.Abono.toDomain() = Abono(

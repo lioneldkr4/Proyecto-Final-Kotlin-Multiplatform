@@ -14,19 +14,12 @@ import java.util.zip.ZipOutputStream
 
 actual class ExcelGenerator(private val context: Context) {
 
-    actual fun generarExcel(
-        nombre: String,
-        telefono: String?,
-        direccion: String?,
-        limiteCredito: Double,
-        saldoPendiente: Double?,
-        acciones: List<AccionPdf>
-    ) {
-        val bytes = buildXlsxBytes(nombre, telefono, direccion, limiteCredito, saldoPendiente, acciones)
+    actual fun generarExcel(estadoCuenta: EstadoCuentaExport) {
+        val bytes = buildXlsxBytes(estadoCuenta)
         val dir = context.getExternalFilesDir(Environment.DIRECTORY_DOCUMENTS) ?: context.filesDir
         dir.mkdirs()
         val ts = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.getDefault()).format(Date())
-        val safe = nombre.replace(Regex("[^a-zA-Z0-9]"), "_")
+        val safe = estadoCuenta.nombre.replace(Regex("[^a-zA-Z0-9]"), "_")
         val file = File(dir, "credito_${safe}_$ts.xlsx")
         file.writeBytes(bytes)
 
@@ -38,10 +31,7 @@ actual class ExcelGenerator(private val context: Context) {
         context.startActivity(intent)
     }
 
-    private fun buildXlsxBytes(
-        nombre: String, telefono: String?, direccion: String?,
-        limiteCredito: Double, saldoPendiente: Double?, acciones: List<AccionPdf>
-    ): ByteArray {
+    private fun buildXlsxBytes(ec: EstadoCuentaExport): ByteArray {
         val out = ByteArrayOutputStream()
         ZipOutputStream(out).use { zip ->
             fun add(name: String, content: String) {
@@ -54,50 +44,106 @@ actual class ExcelGenerator(private val context: Context) {
             add("xl/workbook.xml", workbook())
             add("xl/_rels/workbook.xml.rels", workbookRels())
             add("xl/styles.xml", styles())
-            add("xl/worksheets/sheet1.xml",
-                buildSheetXml(nombre, telefono, direccion, limiteCredito, saldoPendiente, acciones))
+            add("xl/worksheets/sheet1.xml", buildSheetXml(ec))
         }
         return out.toByteArray()
     }
 
-    private fun buildSheetXml(
-        nombre: String, telefono: String?, direccion: String?,
-        limiteCredito: Double, saldoPendiente: Double?, acciones: List<AccionPdf>
-    ): String {
+    private fun buildSheetXml(ec: EstadoCuentaExport): String {
         val sb = StringBuilder()
         var r = 1
 
         fun String.esc() = replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
         fun Double.fmt() = String.format(Locale.US, "%.2f", this)
 
-        fun strCell(col: String, v: String, bold: Boolean = false): String {
+        fun str(col: String, v: String, bold: Boolean = false): String {
             val s = if (bold) " s=\"1\"" else ""
             return "<c r=\"$col$r\" t=\"inlineStr\"$s><is><t>${v.esc()}</t></is></c>"
         }
-        fun numCell(col: String, v: Double) = "<c r=\"$col$r\"><v>${v.fmt()}</v></c>"
+        fun num(col: String, v: Double, bold: Boolean = false): String {
+            val s = if (bold) " s=\"1\"" else ""
+            return "<c r=\"$col$r\"$s><v>${v.fmt()}</v></c>"
+        }
+        fun lng(col: String, v: Long) = "<c r=\"$col$r\"><v>$v</v></c>"
         fun row(vararg cells: String) { sb.append("<row r=\"$r\">${cells.joinToString("")}</row>"); r++ }
-        fun emptyRow() { sb.append("<row r=\"$r\"/>"); r++ }
+        fun gap() { sb.append("<row r=\"$r\"/>"); r++ }
 
         sb.append("<?xml version=\"1.0\" encoding=\"UTF-8\" standalone=\"yes\"?>")
         sb.append("<worksheet xmlns=\"http://schemas.openxmlformats.org/spreadsheetml/2006/main\"><sheetData>")
 
-        row(strCell("A", "Resumen de Crédito", bold = true))
-        emptyRow()
-        row(strCell("A", "Campo", bold = true), strCell("B", "Valor", bold = true))
-        row(strCell("A", "Nombre"), strCell("B", nombre))
-        telefono?.let { row(strCell("A", "Teléfono"), strCell("B", it)) }
-        direccion?.let { row(strCell("A", "Dirección"), strCell("B", it)) }
-        row(strCell("A", "Límite de Crédito"), numCell("B", limiteCredito))
-        row(strCell("A", "Saldo Pendiente"), numCell("B", saldoPendiente ?: limiteCredito))
-        emptyRow()
-        row(strCell("A", "Historial de Acciones", bold = true))
-        row(strCell("A", "Tipo", bold = true), strCell("B", "Monto ($)", bold = true), strCell("C", "Fecha", bold = true))
+        // ── Encabezado ────────────────────────────────────────────────────────
+        row(str("A", "ESTADO DE CUENTA", bold = true))
+        row(str("A", "Generado: ${ec.fechaGeneracion}"))
+        gap()
 
-        if (acciones.isEmpty()) {
-            row(strCell("A", "Sin acciones registradas."))
+        // ── Datos del cliente ─────────────────────────────────────────────────
+        row(str("A", "DATOS DEL CLIENTE", bold = true))
+        row(str("A", "Nombre"), str("B", ec.nombre))
+        ec.telefono?.let { row(str("A", "Telefono"), str("B", it)) }
+        ec.direccion?.let { row(str("A", "Direccion"), str("B", it)) }
+        gap()
+
+        // ── Resumen financiero ────────────────────────────────────────────────
+        row(str("A", "RESUMEN FINANCIERO", bold = true))
+        row(str("A", "Limite de credito"),   num("B", ec.limiteCredito))
+        row(str("A", "Credito utilizado"),   num("B", ec.creditoUtilizado))
+        row(str("A", "Credito disponible"),  num("B", ec.creditoDisponible))
+        row(str("A", "Total abonado"),       num("B", ec.totalAbonado))
+        val activos    = ec.creditos.count { it.estadoNombre == "Activo" }.toLong()
+        val liquidados = ec.creditos.count { it.estadoNombre == "Liquidado" }.toLong()
+        val vencidos   = ec.creditos.count { it.estadoNombre == "Vencido" }.toLong()
+        row(str("A", "Creditos activos"),    lng("B", activos))
+        row(str("A", "Creditos liquidados"), lng("B", liquidados))
+        if (vencidos > 0) row(str("A", "Creditos vencidos"), lng("B", vencidos))
+        gap()
+
+        // ── Tabla de créditos ─────────────────────────────────────────────────
+        row(str("A", "DETALLE DE CREDITOS", bold = true))
+        row(
+            str("A", "#", bold = true),
+            str("B", "Estado", bold = true),
+            str("C", "Monto Prestado ($)", bold = true),
+            str("D", "Monto Pagado ($)", bold = true),
+            str("E", "Saldo Pendiente ($)", bold = true),
+            str("F", "Vencimiento", bold = true)
+        )
+        if (ec.creditos.isEmpty()) {
+            row(str("A", "Sin creditos registrados."))
         } else {
-            acciones.forEach { a -> row(strCell("A", a.tipo), numCell("B", a.monto), strCell("C", a.fecha)) }
+            ec.creditos.forEach { c ->
+                val pagado = c.montoPrestado - c.saldoPendiente
+                val fechaDisp = c.fechaVencimiento?.let { iso ->
+                    val p = iso.split("-")
+                    if (p.size == 3) "${p[2]}/${p[1]}/${p[0]}" else iso
+                } ?: "-"
+                row(
+                    str("A", "#${c.id}"),
+                    str("B", c.estadoNombre),
+                    num("C", c.montoPrestado),
+                    num("D", pagado),
+                    num("E", c.saldoPendiente),
+                    str("F", fechaDisp)
+                )
+            }
         }
+        gap()
+
+        // ── Tabla de abonos ───────────────────────────────────────────────────
+        row(str("A", "HISTORIAL DE ABONOS", bold = true))
+        row(
+            str("A", "Credito #", bold = true),
+            str("B", "Monto ($)", bold = true),
+            str("C", "Fecha", bold = true),
+            str("D", "Tipo de Pago", bold = true)
+        )
+        var hayAbonos = false
+        ec.creditos.forEach { c ->
+            c.abonos.forEach { a ->
+                hayAbonos = true
+                row(str("A", "#${c.id}"), num("B", a.monto), str("C", a.fecha), str("D", a.tipoNombre))
+            }
+        }
+        if (!hayAbonos) row(str("A", "Sin abonos registrados."))
 
         sb.append("</sheetData></worksheet>")
         return sb.toString()

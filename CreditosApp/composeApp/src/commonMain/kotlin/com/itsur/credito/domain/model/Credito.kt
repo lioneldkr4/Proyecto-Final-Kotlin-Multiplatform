@@ -5,5 +5,6 @@ data class Credito(
     val clienteId: Long,
     val montoPrestado: Double,
     val saldoPendiente: Double,
-    val estadoId: Long
+    val estadoId: Long,
+    val fechaVencimiento: String?  // ISO 8601: yyyy-MM-dd, nullable
 )
