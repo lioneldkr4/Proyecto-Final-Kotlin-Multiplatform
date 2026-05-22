@@ -19,12 +19,12 @@ interface ClienteRepository {
     fun actualizar(id: Long, nombre: String, telefono: String?, direccion: String?, limiteCredito: Double)
     fun eliminar(id: Long)
 
-    // Crédito (operaciones consolidadas con transacción)
-    fun obtenerCreditoPorCliente(clienteId: Long): Credito?
-    fun registrarNuevoCredito(clienteId: Long, monto: Double): Credito?
-    fun liquidarCredito(clienteId: Long)
+    // Crédito — múltiples disposiciones por cliente
+    fun obtenerCreditosPorCliente(clienteId: Long): List<Credito>
+    fun registrarNuevoCredito(clienteId: Long, monto: Double, limiteCredito: Double): Credito?
+    fun liquidarCredito(creditoId: Long)
 
-    // Abono (operación consolidada con transacción)
+    // Abono — aplica a un crédito específico
     fun obtenerAbonosPorCliente(clienteId: Long): List<Abono>
-    fun registrarAbono(clienteId: Long, limiteCredito: Double, monto: Double, fecha: String, tipoId: Long)
+    fun registrarAbono(creditoId: Long, monto: Double, fecha: String, tipoId: Long)
 }

@@ -1,15 +1,22 @@
 package com.itsur.credito.presentation
 
 import androidx.compose.foundation.BorderStroke
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.StrokeCap
+import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.itsur.credito.data.generarQrImageBitmap
@@ -101,35 +108,35 @@ fun PantallaCobranza(
 @Composable
 fun PantallaDetalles(
     cliente: Cliente,
-    creditoActual: Credito?,
+    creditos: List<Credito>,
     abonos: List<Abono>,
-    creditosNuevos: List<AccionUI>,
     tiposAbono: List<TipoAbono>,
     estadosCredito: List<EstadoCredito>,
     onVolver: () -> Unit,
     onEditar: () -> Unit,
     onImprimirPdf: () -> Unit,
     onGenerarExcel: () -> Unit,
-    onRegistrarAbono: (Double, Long) -> Unit,
+    onRegistrarAbono: (creditoId: Long, monto: Double, tipoId: Long) -> Unit,
     onRegistrarCredito: (Double) -> Unit,
+    onLiquidarCredito: (creditoId: Long) -> Unit,
     onEliminar: () -> Unit
 ) {
     var mostrarDialogoAbono by remember { mutableStateOf(false) }
+    var creditoParaAbonar by remember { mutableStateOf<Long?>(null) }
     var montoAbono by remember { mutableStateOf("") }
     var errorMonto by remember { mutableStateOf(false) }
 
     var mostrarDialogoCredito by remember { mutableStateOf(false) }
     var montoCredito by remember { mutableStateOf("") }
+    var errorCreditoDisponible by remember { mutableStateOf(false) }
 
     var mostrarDialogoEliminar by remember { mutableStateOf(false) }
     var mostrarQr by remember { mutableStateOf(false) }
 
-    val creditoLiquidado = creditoActual?.estadoId == 2L
-
-    val accionesList = remember(abonos, creditosNuevos) {
-        abonos.map { AccionUI(tipo = "Abono", monto = it.montoAbonado, detalle = "Fecha: ${it.fecha}") } +
-                creditosNuevos
+    val creditoUsado = remember(creditos) {
+        creditos.filter { it.estadoId == 1L }.sumOf { it.saldoPendiente }
     }
+    val creditoDisponible = cliente.limiteCredito - creditoUsado
 
     Column(modifier = Modifier.fillMaxSize().padding(24.dp)) {
 
@@ -147,55 +154,61 @@ fun PantallaDetalles(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
         ) {
-            Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = cliente.nombre,
-                    style = MaterialTheme.typography.headlineSmall,
-                    fontWeight = FontWeight.Bold
-                )
-                Spacer(modifier = Modifier.height(8.dp))
-                Text("Teléfono: ${cliente.telefono ?: "No proporcionado"}")
-                Text("Dirección: ${cliente.direccion ?: "No proporcionada"}")
-                Spacer(modifier = Modifier.height(8.dp))
-
-                val estadoNombre = estadosCredito.find { it.id == creditoActual?.estadoId }?.nombre
-                val estadoColor = when (creditoActual?.estadoId) {
-                    2L -> Color(0xFF4CAF50)
-                    3L -> MaterialTheme.colorScheme.error
-                    else -> MaterialTheme.colorScheme.primary
-                }
-
-                if (estadoNombre != null) {
-                    Card(colors = CardDefaults.cardColors(containerColor = estadoColor)) {
-                        Text(
-                            text = estadoNombre,
-                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp),
-                            color = Color.White,
-                            fontWeight = FontWeight.Bold
-                        )
-                    }
-                    Spacer(modifier = Modifier.height(4.dp))
-                }
-
-                if (!creditoLiquidado) {
-                    val saldo = creditoActual?.saldoPendiente ?: cliente.limiteCredito
+            Row(
+                modifier = Modifier.padding(16.dp).fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Column(modifier = Modifier.weight(1f)) {
                     Text(
-                        text = "Saldo pendiente: $$saldo",
-                        color = estadoColor,
+                        text = cliente.nombre,
+                        style = MaterialTheme.typography.headlineSmall,
                         fontWeight = FontWeight.Bold
                     )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text("Teléfono: ${cliente.telefono ?: "No proporcionado"}")
+                    Text("Dirección: ${cliente.direccion ?: "No proporcionada"}")
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                        Column {
+                            Text("Límite", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                            Text("$${"%,.2f".format(cliente.limiteCredito)}", fontWeight = FontWeight.Bold)
+                        }
+                        Column {
+                            Text("Disponible", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                            Text(
+                                "$${"%,.2f".format(creditoDisponible)}",
+                                fontWeight = FontWeight.Bold,
+                                color = if (creditoDisponible > 0) Color(0xFF2E7D32) else MaterialTheme.colorScheme.error
+                            )
+                        }
+                        Column {
+                            Text("Utilizado", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                            Text(
+                                "$${"%,.2f".format(creditoUsado)}",
+                                fontWeight = FontWeight.Bold,
+                                color = if (creditoUsado > 0) MaterialTheme.colorScheme.primary else Color.Gray
+                            )
+                        }
+                    }
                 }
+                Spacer(modifier = Modifier.width(12.dp))
+                GraficaDona(
+                    utilizado = creditoUsado,
+                    limite = cliente.limiteCredito,
+                    modifier = Modifier.size(110.dp)
+                )
             }
         }
 
-        Spacer(modifier = Modifier.height(16.dp))
+        Spacer(modifier = Modifier.height(12.dp))
 
-        // ── Botones de acción financiera ─────────────────────────────────────
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            if (!creditoLiquidado) {
-                Button(onClick = { mostrarDialogoAbono = true }) { Text("Abonar") }
-            }
-            Button(onClick = { mostrarDialogoCredito = true }) { Text("Nuevo Crédito") }
+        // ── Botón Nuevo Crédito ──────────────────────────────────────────────
+        Button(
+            onClick = { mostrarDialogoCredito = true },
+            modifier = Modifier.fillMaxWidth(),
+            enabled = creditoDisponible > 0
+        ) {
+            Text("+ Nuevo Crédito")
         }
 
         Spacer(modifier = Modifier.height(8.dp))
@@ -207,47 +220,35 @@ fun PantallaDetalles(
             OutlinedButton(onClick = { mostrarQr = true }) { Text("Ver QR") }
         }
 
-        // Badge de crédito completado
-        if (creditoLiquidado) {
-            Spacer(modifier = Modifier.height(8.dp))
-            Card(
-                modifier = Modifier.fillMaxWidth(),
-                colors = CardDefaults.cardColors(containerColor = Color(0xFF4CAF50).copy(alpha = 0.12f))
-            ) {
-                Text(
-                    text = "✓ Este cliente ha liquidado su deuda por completo",
-                    modifier = Modifier.padding(12.dp),
-                    color = Color(0xFF2E7D32),
-                    style = MaterialTheme.typography.bodyMedium,
-                    fontWeight = FontWeight.SemiBold
-                )
-            }
-        }
+        Spacer(modifier = Modifier.height(16.dp))
 
-        // ── Historial de acciones ────────────────────────────────────────────
-        if (accionesList.isNotEmpty()) {
-            Text(
-                "Acciones realizadas:",
-                modifier = Modifier.padding(top = 16.dp),
-                fontWeight = FontWeight.SemiBold
-            )
+        // ── Lista de créditos ────────────────────────────────────────────────
+        if (creditos.isEmpty()) {
+            Text("Sin créditos registrados.", color = Color.Gray)
+            Spacer(modifier = Modifier.weight(1f))
+        } else {
+            Text("Créditos:", fontWeight = FontWeight.SemiBold)
+            Spacer(modifier = Modifier.height(8.dp))
             LazyColumn(
-                verticalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier
-                    .padding(top = 8.dp)
-                    .weight(1f)
+                verticalArrangement = Arrangement.spacedBy(10.dp),
+                modifier = Modifier.weight(1f)
             ) {
-                items(accionesList) { accion ->
-                    Card(modifier = Modifier.fillMaxWidth()) {
-                        Column(modifier = Modifier.padding(16.dp)) {
-                            Text("${accion.tipo}: $${accion.monto}", fontWeight = FontWeight.Bold)
-                            Text(text = accion.detalle, style = MaterialTheme.typography.bodySmall)
-                        }
-                    }
+                items(creditos) { credito ->
+                    TarjetaCredito(
+                        credito = credito,
+                        abonos = abonos.filter { it.creditoId == credito.id },
+                        tiposAbono = tiposAbono,
+                        estadosCredito = estadosCredito,
+                        onAbonar = {
+                            creditoParaAbonar = credito.id
+                            montoAbono = ""
+                            errorMonto = false
+                            mostrarDialogoAbono = true
+                        },
+                        onLiquidar = { onLiquidarCredito(credito.id) }
+                    )
                 }
             }
-        } else {
-            Spacer(modifier = Modifier.weight(1f))
         }
 
         // ── Botones de gestión de cliente ────────────────────────────────────
@@ -275,7 +276,8 @@ fun PantallaDetalles(
 
     // ── Diálogo: Registrar Abono ─────────────────────────────────────────────
     if (mostrarDialogoAbono) {
-        val saldoDisponible = creditoActual?.saldoPendiente ?: cliente.limiteCredito
+        val creditoActivo = creditos.find { it.id == creditoParaAbonar }
+        val saldoDisponible = creditoActivo?.saldoPendiente ?: 0.0
         var tipoAbonoSeleccionado by remember { mutableStateOf(tiposAbono.firstOrNull()?.id ?: 1L) }
         var expandidoTipoAbono by remember { mutableStateOf(false) }
 
@@ -288,6 +290,11 @@ fun PantallaDetalles(
             title = { Text("Registrar Abono") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Saldo pendiente: $${"%,.2f".format(saldoDisponible)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
                     OutlinedTextField(
                         value = montoAbono,
                         onValueChange = {
@@ -302,7 +309,7 @@ fun PantallaDetalles(
                     )
                     if (errorMonto) {
                         Text(
-                            text = "El monto supera el saldo pendiente ($$${"%.2f".format(saldoDisponible)})",
+                            text = "El monto supera el saldo pendiente ($${"%,.2f".format(saldoDisponible)})",
                             color = MaterialTheme.colorScheme.error,
                             style = MaterialTheme.typography.bodySmall
                         )
@@ -342,10 +349,12 @@ fun PantallaDetalles(
                 Button(onClick = {
                     val monto = montoAbono.toDoubleOrNull()
                     when {
-                        monto == null || monto <= 0 -> { /* campo vacío o inválido */ }
+                        monto == null || monto <= 0 -> {}
                         monto > saldoDisponible -> errorMonto = true
                         else -> {
-                            onRegistrarAbono(monto, tipoAbonoSeleccionado)
+                            creditoParaAbonar?.let { id ->
+                                onRegistrarAbono(id, monto, tipoAbonoSeleccionado)
+                            }
                             mostrarDialogoAbono = false
                             montoAbono = ""
                             errorMonto = false
@@ -366,32 +375,61 @@ fun PantallaDetalles(
     // ── Diálogo: Nuevo Crédito ───────────────────────────────────────────────
     if (mostrarDialogoCredito) {
         AlertDialog(
-            onDismissRequest = { mostrarDialogoCredito = false },
-            title = { Text("Registrar Nuevo Crédito") },
+            onDismissRequest = {
+                mostrarDialogoCredito = false
+                montoCredito = ""
+                errorCreditoDisponible = false
+            },
+            title = { Text("Nuevo Crédito") },
             text = {
-                OutlinedTextField(
-                    value = montoCredito,
-                    onValueChange = {
-                        if (it.isEmpty() || it.matches(Regex("^\\d*\\.?\\d*$"))) montoCredito = it
-                    },
-                    label = { Text("Monto del nuevo crédito ($)") },
-                    singleLine = true
-                )
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text(
+                        "Crédito disponible: $${"%,.2f".format(creditoDisponible)}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = Color.Gray
+                    )
+                    OutlinedTextField(
+                        value = montoCredito,
+                        onValueChange = {
+                            if (it.isEmpty() || it.matches(Regex("^\\d*\\.?\\d*$"))) {
+                                montoCredito = it
+                                errorCreditoDisponible = false
+                            }
+                        },
+                        label = { Text("Monto a disponer ($)") },
+                        singleLine = true,
+                        isError = errorCreditoDisponible
+                    )
+                    if (errorCreditoDisponible) {
+                        Text(
+                            text = "El monto supera el crédito disponible ($${"%,.2f".format(creditoDisponible)})",
+                            color = MaterialTheme.colorScheme.error,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                    }
+                }
             },
             confirmButton = {
                 Button(onClick = {
                     val monto = montoCredito.toDoubleOrNull()
-                    if (monto != null && monto > 0) {
-                        onRegistrarCredito(monto)
-                        mostrarDialogoCredito = false
-                        montoCredito = ""
+                    when {
+                        monto == null || monto <= 0 -> {}
+                        monto > creditoDisponible -> errorCreditoDisponible = true
+                        else -> {
+                            onRegistrarCredito(monto)
+                            mostrarDialogoCredito = false
+                            montoCredito = ""
+                            errorCreditoDisponible = false
+                        }
                     }
                 }) { Text("Guardar") }
             },
             dismissButton = {
-                TextButton(onClick = { mostrarDialogoCredito = false; montoCredito = "" }) {
-                    Text("Cancelar")
-                }
+                TextButton(onClick = {
+                    mostrarDialogoCredito = false
+                    montoCredito = ""
+                    errorCreditoDisponible = false
+                }) { Text("Cancelar") }
             }
         )
     }
@@ -403,7 +441,7 @@ fun PantallaDetalles(
             append("ID: ${cliente.id}\n")
             append("Nombre: ${cliente.nombre}\n")
             append("Límite: $${cliente.limiteCredito}\n")
-            append("Saldo: $${creditoActual?.saldoPendiente ?: cliente.limiteCredito}")
+            append("Disponible: $${"%,.2f".format(creditoDisponible)}")
         }
         val qrBitmap: ImageBitmap = remember(cliente.id) { generarQrImageBitmap(qrTexto) }
         AlertDialog(
@@ -459,6 +497,163 @@ fun PantallaDetalles(
                 TextButton(onClick = { mostrarDialogoEliminar = false }) { Text("Cancelar") }
             }
         )
+    }
+}
+
+@Composable
+private fun TarjetaCredito(
+    credito: Credito,
+    abonos: List<Abono>,
+    tiposAbono: List<TipoAbono>,
+    estadosCredito: List<EstadoCredito>,
+    onAbonar: () -> Unit,
+    onLiquidar: () -> Unit
+) {
+    val estadoNombre = estadosCredito.find { it.id == credito.estadoId }?.nombre ?: ""
+    val estadoColor = when (credito.estadoId) {
+        2L -> Color(0xFF4CAF50)
+        3L -> MaterialTheme.colorScheme.error
+        else -> MaterialTheme.colorScheme.primary
+    }
+    val activo = credito.estadoId == 1L
+    val pagado = credito.montoPrestado - credito.saldoPendiente
+    val progresoPago = if (credito.montoPrestado > 0)
+        (pagado / credito.montoPrestado).toFloat().coerceIn(0f, 1f)
+    else 1f
+
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        colors = CardDefaults.cardColors(
+            containerColor = if (activo) MaterialTheme.colorScheme.surface
+            else MaterialTheme.colorScheme.surfaceVariant
+        )
+    ) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Crédito #${credito.id}",
+                    fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleSmall,
+                    modifier = Modifier.weight(1f)
+                )
+                Card(colors = CardDefaults.cardColors(containerColor = estadoColor)) {
+                    Text(
+                        text = estadoNombre,
+                        modifier = Modifier.padding(horizontal = 8.dp, vertical = 2.dp),
+                        color = Color.White,
+                        style = MaterialTheme.typography.labelSmall,
+                        fontWeight = FontWeight.Bold
+                    )
+                }
+            }
+
+            Spacer(modifier = Modifier.height(8.dp))
+
+            Row(horizontalArrangement = Arrangement.spacedBy(16.dp)) {
+                Column {
+                    Text("Monto", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                    Text("$${"%,.2f".format(credito.montoPrestado)}", fontWeight = FontWeight.SemiBold)
+                }
+                if (activo) {
+                    Column {
+                        Text("Pendiente", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                        Text(
+                            "$${"%,.2f".format(credito.saldoPendiente)}",
+                            fontWeight = FontWeight.SemiBold,
+                            color = estadoColor
+                        )
+                    }
+                    Column {
+                        Text("Pagado", style = MaterialTheme.typography.labelSmall, color = Color.Gray)
+                        Text(
+                            "$${"%,.2f".format(credito.montoPrestado - credito.saldoPendiente)}",
+                            fontWeight = FontWeight.SemiBold,
+                            color = Color(0xFF2E7D32)
+                        )
+                    }
+                }
+            }
+
+            Spacer(modifier = Modifier.height(10.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "Progreso de pago",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = Color.Gray
+                )
+                Text(
+                    "${"%.0f".format(progresoPago * 100)}%",
+                    style = MaterialTheme.typography.labelSmall,
+                    fontWeight = FontWeight.Bold,
+                    color = if (progresoPago >= 1f) Color(0xFF2E7D32) else estadoColor
+                )
+            }
+            Spacer(modifier = Modifier.height(4.dp))
+            LinearProgressIndicator(
+                progress = { progresoPago },
+                modifier = Modifier.fillMaxWidth().height(8.dp).clip(RoundedCornerShape(4.dp)),
+                color = Color(0xFF4CAF50),
+                trackColor = MaterialTheme.colorScheme.surfaceVariant
+            )
+
+            if (abonos.isNotEmpty()) {
+                Spacer(modifier = Modifier.height(8.dp))
+                HorizontalDivider()
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("Abonos:", style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.SemiBold)
+                Spacer(modifier = Modifier.height(4.dp))
+                abonos.forEach { abono ->
+                    val tipoNombre = tiposAbono.find { it.id == abono.tipoId }?.nombre ?: ""
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(vertical = 2.dp),
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text(
+                            "$${"%,.2f".format(abono.montoAbonado)}",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color(0xFF2E7D32),
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        Text(
+                            abono.fecha,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = Color.Gray
+                        )
+                        if (tipoNombre.isNotBlank()) {
+                            Text(
+                                tipoNombre,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = Color.Gray
+                            )
+                        }
+                    }
+                }
+            }
+
+            if (activo) {
+                Spacer(modifier = Modifier.height(10.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = onAbonar, modifier = Modifier.weight(1f)) {
+                        Text("Abonar")
+                    }
+                    OutlinedButton(
+                        onClick = onLiquidar,
+                        modifier = Modifier.weight(1f),
+                        colors = ButtonDefaults.outlinedButtonColors(contentColor = Color(0xFF2E7D32)),
+                        border = BorderStroke(1.dp, Color(0xFF2E7D32))
+                    ) {
+                        Text("Liquidar")
+                    }
+                }
+            }
+        }
     }
 }
 

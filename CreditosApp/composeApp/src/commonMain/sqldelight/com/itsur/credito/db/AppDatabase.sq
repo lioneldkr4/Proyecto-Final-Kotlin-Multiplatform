@@ -90,26 +90,22 @@ insertarCredito:
 INSERT INTO Credito(cliente_id, monto_prestado, saldo_pendiente)
 VALUES (?, ?, ?);
 
-obtenerCreditoPorCliente:
-SELECT * FROM Credito WHERE cliente_id = ?;
+obtenerCreditosPorCliente:
+SELECT * FROM Credito WHERE cliente_id = ? ORDER BY id DESC;
+
+obtenerCreditoPorId:
+SELECT * FROM Credito WHERE id = ?;
 
 actualizarSaldoPendiente:
 UPDATE Credito
 SET saldo_pendiente = saldo_pendiente - ?
 WHERE id = ?;
 
-acumularCredito:
-UPDATE Credito
-SET monto_prestado = monto_prestado + ?,
-    saldo_pendiente = saldo_pendiente + ?,
-    estado_id = 1
-WHERE cliente_id = ?;
-
 liquidarCredito:
 UPDATE Credito
 SET saldo_pendiente = 0,
     estado_id = 2
-WHERE cliente_id = ?;
+WHERE id = ?;
 
 eliminarCredito:
 DELETE FROM Credito WHERE id = ?;

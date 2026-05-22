@@ -20,7 +20,6 @@ fun AppNavigation(viewModel: AppViewModel) {
     val uiState by viewModel.uiState.collectAsState()
     val navController = rememberNavController()
 
-    // Puente: cuando el ViewModel cambia de pantalla, el NavController navega
     LaunchedEffect(uiState.pantalla) {
         when (uiState.pantalla) {
             Pantalla.Inicio -> navController.navigate(Routes.INICIO) {
@@ -54,17 +53,19 @@ fun AppNavigation(viewModel: AppViewModel) {
             uiState.clienteSeleccionado?.let { cliente ->
                 PantallaDetalles(
                     cliente = cliente,
-                    creditoActual = uiState.creditoActual,
+                    creditos = uiState.creditos,
                     abonos = uiState.abonos,
-                    creditosNuevos = uiState.creditosNuevos,
                     tiposAbono = uiState.tiposAbono,
                     estadosCredito = uiState.estadosCredito,
                     onVolver = viewModel::volverAInicio,
                     onEditar = viewModel::navegarAEditar,
                     onImprimirPdf = viewModel::generarPdf,
                     onGenerarExcel = viewModel::generarExcel,
-                    onRegistrarAbono = { monto, tipoId -> viewModel.registrarAbono(monto, tipoId) },
+                    onRegistrarAbono = { creditoId, monto, tipoId ->
+                        viewModel.registrarAbono(creditoId, monto, tipoId)
+                    },
                     onRegistrarCredito = viewModel::registrarNuevoCredito,
+                    onLiquidarCredito = viewModel::liquidarCredito,
                     onEliminar = { viewModel.eliminarCliente(cliente.id) }
                 )
             }

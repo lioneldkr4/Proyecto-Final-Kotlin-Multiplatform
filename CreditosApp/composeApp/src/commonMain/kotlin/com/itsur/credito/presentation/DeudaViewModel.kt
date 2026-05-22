@@ -62,7 +62,8 @@ class AppViewModel(
             it.copy(
                 pantalla = Pantalla.Detalles,
                 clienteSeleccionado = cliente,
-                creditosNuevos = emptyList()
+                creditos = emptyList(),
+                abonos = emptyList()
             )
         }
         cargarDetallesCliente(cliente.id)
@@ -110,9 +111,8 @@ class AppViewModel(
             it.copy(
                 pantalla = Pantalla.Inicio,
                 clienteSeleccionado = null,
-                creditoActual = null,
-                abonos = emptyList(),
-                creditosNuevos = emptyList()
+                creditos = emptyList(),
+                abonos = emptyList()
             )
         }
         cargarTodosLosClientes()
@@ -141,49 +141,53 @@ class AppViewModel(
         }
     }
 
-    // Transacción: inserta el abono y actualiza el saldo en una sola operación atómica
-    fun registrarAbono(monto: Double, tipoId: Long) {
+    fun registrarAbono(creditoId: Long, monto: Double, tipoId: Long) {
         val cliente = _uiState.value.clienteSeleccionado ?: return
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
-                repository.registrarAbono(cliente.id, cliente.limiteCredito, monto, obtenerFecha(), tipoId)
+                repository.registrarAbono(creditoId, monto, obtenerFecha(), tipoId)
                 Pair(
-                    repository.obtenerCreditoPorCliente(cliente.id),
+                    repository.obtenerCreditosPorCliente(cliente.id),
                     repository.obtenerAbonosPorCliente(cliente.id)
                 )
             }
-                .onSuccess { (credito, abonos) ->
-                    _uiState.update { it.copy(creditoActual = credito, abonos = abonos) }
+                .onSuccess { (creditos, abonos) ->
+                    _uiState.update { it.copy(creditos = creditos, abonos = abonos) }
                 }
                 .onFailure { e -> _uiState.update { it.copy(error = e.message) } }
         }
     }
 
-    // Transacción: crea o acumula el crédito de forma atómica
     fun registrarNuevoCredito(monto: Double) {
         val cliente = _uiState.value.clienteSeleccionado ?: return
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
-                Pair(repository.registrarNuevoCredito(cliente.id, monto), obtenerFecha())
+                repository.registrarNuevoCredito(cliente.id, monto, cliente.limiteCredito)
+                Pair(
+                    repository.obtenerCreditosPorCliente(cliente.id),
+                    repository.obtenerAbonosPorCliente(cliente.id)
+                )
             }
-                .onSuccess { (creditoActualizado, fecha) ->
-                    val nuevaAccion = AccionUI(tipo = "Nuevo Crédito", monto = monto, detalle = "Fecha: $fecha")
-                    _uiState.update {
-                        it.copy(
-                            creditoActual = creditoActualizado,
-                            creditosNuevos = it.creditosNuevos + nuevaAccion
-                        )
-                    }
+                .onSuccess { (creditos, abonos) ->
+                    _uiState.update { it.copy(creditos = creditos, abonos = abonos) }
                 }
                 .onFailure { e -> _uiState.update { it.copy(error = e.message) } }
         }
     }
 
-    fun liquidarCredito() {
+    fun liquidarCredito(creditoId: Long) {
         val cliente = _uiState.value.clienteSeleccionado ?: return
         viewModelScope.launch(Dispatchers.IO) {
-            runCatching { repository.liquidarCredito(cliente.id) }
-                .onSuccess { cargarDetallesCliente(cliente.id) }
+            runCatching {
+                repository.liquidarCredito(creditoId)
+                Pair(
+                    repository.obtenerCreditosPorCliente(cliente.id),
+                    repository.obtenerAbonosPorCliente(cliente.id)
+                )
+            }
+                .onSuccess { (creditos, abonos) ->
+                    _uiState.update { it.copy(creditos = creditos, abonos = abonos) }
+                }
                 .onFailure { e -> _uiState.update { it.copy(error = e.message) } }
         }
     }
@@ -192,8 +196,13 @@ class AppViewModel(
         val estado = _uiState.value
         val cliente = estado.clienteSeleccionado ?: return
 
-        val acciones = estado.abonos.map { AccionPdf("Abono", it.montoAbonado, it.fecha) } +
-                estado.creditosNuevos.map { AccionPdf(it.tipo, it.monto, it.detalle.removePrefix("Fecha: ")) }
+        val saldoTotal = estado.creditos.filter { it.estadoId == 1L }.sumOf { it.saldoPendiente }
+
+        val acciones = estado.creditos.map { c ->
+            AccionPdf("Crédito #${c.id}", c.montoPrestado, "Saldo: ${"%.2f".format(c.saldoPendiente)}")
+        } + estado.abonos.map { a ->
+            AccionPdf("Abono", a.montoAbonado, a.fecha)
+        }
 
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
@@ -202,7 +211,7 @@ class AppViewModel(
                     telefono = cliente.telefono,
                     direccion = cliente.direccion,
                     limiteCredito = cliente.limiteCredito,
-                    saldoPendiente = estado.creditoActual?.saldoPendiente,
+                    saldoPendiente = saldoTotal.takeIf { it > 0 },
                     acciones = acciones
                 )
             }.onFailure { e -> _uiState.update { it.copy(error = e.message) } }
@@ -213,8 +222,13 @@ class AppViewModel(
         val estado = _uiState.value
         val cliente = estado.clienteSeleccionado ?: return
 
-        val acciones = estado.abonos.map { AccionPdf("Abono", it.montoAbonado, it.fecha) } +
-                estado.creditosNuevos.map { AccionPdf(it.tipo, it.monto, it.detalle.removePrefix("Fecha: ")) }
+        val saldoTotal = estado.creditos.filter { it.estadoId == 1L }.sumOf { it.saldoPendiente }
+
+        val acciones = estado.creditos.map { c ->
+            AccionPdf("Crédito #${c.id}", c.montoPrestado, "Saldo: ${"%.2f".format(c.saldoPendiente)}")
+        } + estado.abonos.map { a ->
+            AccionPdf("Abono", a.montoAbonado, a.fecha)
+        }
 
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
@@ -223,7 +237,7 @@ class AppViewModel(
                     telefono = cliente.telefono,
                     direccion = cliente.direccion,
                     limiteCredito = cliente.limiteCredito,
-                    saldoPendiente = estado.creditoActual?.saldoPendiente,
+                    saldoPendiente = saldoTotal.takeIf { it > 0 },
                     acciones = acciones
                 )
             }.onFailure { e -> _uiState.update { it.copy(error = e.message) } }
@@ -238,12 +252,12 @@ class AppViewModel(
         viewModelScope.launch(Dispatchers.IO) {
             runCatching {
                 Pair(
-                    repository.obtenerCreditoPorCliente(clienteId),
+                    repository.obtenerCreditosPorCliente(clienteId),
                     repository.obtenerAbonosPorCliente(clienteId)
                 )
             }
-                .onSuccess { (credito, abonos) ->
-                    _uiState.update { it.copy(creditoActual = credito, abonos = abonos) }
+                .onSuccess { (creditos, abonos) ->
+                    _uiState.update { it.copy(creditos = creditos, abonos = abonos) }
                 }
                 .onFailure { e -> _uiState.update { it.copy(error = e.message) } }
         }
