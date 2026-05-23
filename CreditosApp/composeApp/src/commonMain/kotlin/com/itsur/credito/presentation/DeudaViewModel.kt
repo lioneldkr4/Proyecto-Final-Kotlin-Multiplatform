@@ -12,7 +12,6 @@ import com.itsur.credito.domain.repository.ClienteRepository
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -35,7 +34,7 @@ class AppViewModel(
     }
 
     private fun cargarCatalogos() {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch {
             runCatching {
                 Pair(repository.obtenerEstadosCredito(), repository.obtenerTiposAbono())
             }.onSuccess { (estados, tipos) ->
@@ -45,7 +44,7 @@ class AppViewModel(
     }
 
     fun cargarTodosLosClientes() {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch {
             runCatching { repository.obtenerTodos() }
                 .onSuccess { clientes -> _uiState.update { it.copy(clientes = clientes) } }
                 .onFailure { e -> _uiState.update { it.copy(error = e.message) } }
@@ -53,7 +52,7 @@ class AppViewModel(
     }
 
     fun cargarEstadisticas() {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch {
             runCatching {
                 repository.marcarCreditosVencidos()
                 repository.obtenerEstadisticas()
@@ -64,7 +63,7 @@ class AppViewModel(
     }
 
     fun buscarClientes(query: String) {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch {
             runCatching { repository.buscar(query) }
                 .onSuccess { clientes -> _uiState.update { it.copy(clientes = clientes) } }
                 .onFailure { e -> _uiState.update { it.copy(error = e.message) } }
@@ -97,7 +96,7 @@ class AppViewModel(
 
     fun editarCliente(nombre: String, telefono: String, direccion: String, limite: Double) {
         val cliente = _uiState.value.clienteSeleccionado ?: return
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch {
             runCatching {
                 repository.actualizar(
                     id = cliente.id,
@@ -134,7 +133,7 @@ class AppViewModel(
     }
 
     fun agregarCliente(nombre: String, telefono: String, direccion: String, limite: Double) {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch {
             runCatching {
                 repository.insertar(
                     nombre = nombre,
@@ -149,7 +148,7 @@ class AppViewModel(
     }
 
     fun eliminarCliente(clienteId: Long) {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch {
             runCatching { repository.eliminar(clienteId) }
                 .onSuccess { volverAInicio() }
                 .onFailure { e -> _uiState.update { it.copy(error = e.message) } }
@@ -158,7 +157,7 @@ class AppViewModel(
 
     fun registrarAbono(creditoId: Long, monto: Double, tipoId: Long) {
         val cliente = _uiState.value.clienteSeleccionado ?: return
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch {
             runCatching {
                 repository.registrarAbono(creditoId, monto, obtenerFecha(), tipoId)
                 Pair(
@@ -176,7 +175,7 @@ class AppViewModel(
     fun registrarNuevoCredito(monto: Double, fechaVencimientoStr: String = "") {
         val cliente = _uiState.value.clienteSeleccionado ?: return
         val fechaIso = parsearFechaVencimiento(fechaVencimientoStr)
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch {
             runCatching {
                 repository.registrarNuevoCredito(cliente.id, monto, cliente.limiteCredito, fechaIso)
                 Pair(
@@ -193,7 +192,7 @@ class AppViewModel(
 
     fun liquidarCredito(creditoId: Long) {
         val cliente = _uiState.value.clienteSeleccionado ?: return
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch {
             runCatching {
                 repository.liquidarCredito(creditoId)
                 Pair(
@@ -212,7 +211,7 @@ class AppViewModel(
         val estado = _uiState.value
         if (estado.clienteSeleccionado == null) return
         val export = construirEstadoCuenta(estado)
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch {
             runCatching { pdfGenerator.generarPdf(export) }
                 .onFailure { e -> _uiState.update { it.copy(error = e.message) } }
         }
@@ -222,7 +221,7 @@ class AppViewModel(
         val estado = _uiState.value
         if (estado.clienteSeleccionado == null) return
         val export = construirEstadoCuenta(estado)
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch {
             runCatching { excelGenerator.generarExcel(export) }
                 .onFailure { e -> _uiState.update { it.copy(error = e.message) } }
         }
@@ -267,7 +266,7 @@ class AppViewModel(
     }
 
     private fun cargarDetallesCliente(clienteId: Long) {
-        viewModelScope.launch(Dispatchers.IO) {
+        viewModelScope.launch {
             runCatching {
                 repository.marcarCreditosVencidos()
                 Pair(

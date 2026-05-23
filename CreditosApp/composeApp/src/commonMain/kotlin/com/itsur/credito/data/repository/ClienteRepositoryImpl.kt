@@ -8,6 +8,8 @@ import com.itsur.credito.domain.model.DashboardStats
 import com.itsur.credito.domain.model.EstadoCredito
 import com.itsur.credito.domain.model.TipoAbono
 import com.itsur.credito.domain.repository.ClienteRepository
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 class ClienteRepositoryImpl(private val database: AppDatabase) : ClienteRepository {
 
@@ -22,7 +24,7 @@ class ClienteRepositoryImpl(private val database: AppDatabase) : ClienteReposito
 
     // ── Dashboard ─────────────────────────────────────────────────────────────
 
-    override fun obtenerEstadisticas(): DashboardStats {
+    override suspend fun obtenerEstadisticas(): DashboardStats = withContext(Dispatchers.IO) {
         val totalClientes = queries.obtenerTotalClientes().executeAsOne()
         val creditosActivos = queries.contarCreditosActivos().executeAsOne()
         val creditosVencidos = queries.contarCreditosVencidos().executeAsOne()
@@ -30,7 +32,7 @@ class ClienteRepositoryImpl(private val database: AppDatabase) : ClienteReposito
         val totalPendiente = queries.sumarTotalPendiente().executeAsOne().SUM ?: 0.0
         val topDeudores = queries.obtenerTopDeudores().executeAsList()
             .map { Pair(it.nombre, it.deuda_total ?: 0.0) }
-        return DashboardStats(
+        DashboardStats(
             totalClientes = totalClientes,
             creditosActivos = creditosActivos,
             creditosVencidos = creditosVencidos,
@@ -42,45 +44,43 @@ class ClienteRepositoryImpl(private val database: AppDatabase) : ClienteReposito
 
     // ── Catálogos ────────────────────────────────────────────────────────────
 
-    override fun obtenerEstadosCredito(): List<EstadoCredito> =
+    override suspend fun obtenerEstadosCredito(): List<EstadoCredito> = withContext(Dispatchers.IO) {
         queries.obtenerEstadosCredito().executeAsList().map { it.toDomain() }
+    }
 
-    override fun obtenerTiposAbono(): List<TipoAbono> =
+    override suspend fun obtenerTiposAbono(): List<TipoAbono> = withContext(Dispatchers.IO) {
         queries.obtenerTiposAbono().executeAsList().map { it.toDomain() }
+    }
 
     // ── Cliente ───────────────────────────────────────────────────────────────
 
-    override fun obtenerTodos(): List<Cliente> =
+    override suspend fun obtenerTodos(): List<Cliente> = withContext(Dispatchers.IO) {
         queries.obtenerTodosLosClientes().executeAsList().map { it.toDomain() }
+    }
 
-    override fun buscar(query: String): List<Cliente> =
+    override suspend fun buscar(query: String): List<Cliente> = withContext(Dispatchers.IO) {
         queries.buscarClientesGenerales("%$query%").executeAsList().map { it.toDomain() }
+    }
 
-    override fun insertar(nombre: String, telefono: String?, direccion: String?, limiteCredito: Double) {
+    override suspend fun insertar(nombre: String, telefono: String?, direccion: String?, limiteCredito: Double) = withContext(Dispatchers.IO) {
         queries.insertarCliente(nombre, telefono, direccion, limiteCredito)
     }
 
-    override fun actualizar(id: Long, nombre: String, telefono: String?, direccion: String?, limiteCredito: Double) {
+    override suspend fun actualizar(id: Long, nombre: String, telefono: String?, direccion: String?, limiteCredito: Double) = withContext(Dispatchers.IO) {
         queries.actualizarCliente(nombre, telefono, direccion, limiteCredito, id)
     }
 
-    override fun eliminar(id: Long) {
-        database.transaction {
-            val creditos = queries.obtenerCreditosPorCliente(id).executeAsList()
-            for (credito in creditos) {
-                queries.eliminarAbonosPorCredito(credito.id)
-                queries.eliminarCredito(credito.id)
-            }
-            queries.eliminarCliente(id)
-        }
+    override suspend fun eliminar(id: Long) = withContext(Dispatchers.IO) {
+        queries.eliminarCliente(id)
     }
 
     // ── Crédito ───────────────────────────────────────────────────────────────
 
-    override fun obtenerCreditosPorCliente(clienteId: Long): List<Credito> =
+    override suspend fun obtenerCreditosPorCliente(clienteId: Long): List<Credito> = withContext(Dispatchers.IO) {
         queries.obtenerCreditosPorCliente(clienteId).executeAsList().map { it.toDomain() }
+    }
 
-    override fun registrarNuevoCredito(clienteId: Long, monto: Double, limiteCredito: Double, fechaVencimiento: String?): Credito? {
+    override suspend fun registrarNuevoCredito(clienteId: Long, monto: Double, limiteCredito: Double, fechaVencimiento: String?): Credito? = withContext(Dispatchers.IO) {
         database.transaction {
             val saldoUsado = queries.obtenerCreditosPorCliente(clienteId)
                 .executeAsList()
@@ -92,23 +92,24 @@ class ClienteRepositoryImpl(private val database: AppDatabase) : ClienteReposito
             }
             queries.insertarCredito(clienteId, monto, monto, fechaVencimiento)
         }
-        return queries.obtenerCreditosPorCliente(clienteId).executeAsList().firstOrNull()?.toDomain()
+        queries.obtenerCreditosPorCliente(clienteId).executeAsList().firstOrNull()?.toDomain()
     }
 
-    override fun liquidarCredito(creditoId: Long) {
+    override suspend fun liquidarCredito(creditoId: Long) = withContext(Dispatchers.IO) {
         queries.liquidarCredito(creditoId)
     }
 
-    override fun marcarCreditosVencidos() {
+    override suspend fun marcarCreditosVencidos() = withContext(Dispatchers.IO) {
         queries.marcarCreditosVencidos()
     }
 
     // ── Abono ─────────────────────────────────────────────────────────────────
 
-    override fun obtenerAbonosPorCliente(clienteId: Long): List<Abono> =
+    override suspend fun obtenerAbonosPorCliente(clienteId: Long): List<Abono> = withContext(Dispatchers.IO) {
         queries.obtenerAbonosPorCliente(clienteId).executeAsList().map { it.toDomain() }
+    }
 
-    override fun registrarAbono(creditoId: Long, monto: Double, fecha: String, tipoId: Long) {
+    override suspend fun registrarAbono(creditoId: Long, monto: Double, fecha: String, tipoId: Long) = withContext(Dispatchers.IO) {
         database.transaction {
             val credito = queries.obtenerCreditoPorId(creditoId).executeAsOneOrNull()
                 ?: throw IllegalStateException("Crédito no encontrado")

@@ -1,0 +1,28 @@
+-- Migración 1→2: añadir ON DELETE CASCADE a Credito.cliente_id y Abono.credito_id
+
+CREATE TABLE Credito_new (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    cliente_id INTEGER NOT NULL,
+    monto_prestado REAL NOT NULL,
+    saldo_pendiente REAL NOT NULL,
+    estado_id INTEGER NOT NULL DEFAULT 1,
+    fecha_vencimiento TEXT,
+    FOREIGN KEY (cliente_id) REFERENCES Cliente(id) ON DELETE CASCADE,
+    FOREIGN KEY (estado_id) REFERENCES EstadoCredito(id)
+);
+INSERT INTO Credito_new SELECT * FROM Credito;
+DROP TABLE Credito;
+ALTER TABLE Credito_new RENAME TO Credito;
+
+CREATE TABLE Abono_new (
+    id INTEGER NOT NULL PRIMARY KEY AUTOINCREMENT,
+    credito_id INTEGER NOT NULL,
+    monto_abonado REAL NOT NULL,
+    fecha TEXT NOT NULL,
+    tipo_id INTEGER NOT NULL DEFAULT 1,
+    FOREIGN KEY (credito_id) REFERENCES Credito(id) ON DELETE CASCADE,
+    FOREIGN KEY (tipo_id) REFERENCES TipoAbono(id)
+);
+INSERT INTO Abono_new SELECT * FROM Abono;
+DROP TABLE Abono;
+ALTER TABLE Abono_new RENAME TO Abono;
