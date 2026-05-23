@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(./gradlew composeApp:compileKotlinJvm)"
+      "Bash(./gradlew composeApp:compileKotlinJvm)",
+      "Bash(git *)"
     ]
   }
 }
