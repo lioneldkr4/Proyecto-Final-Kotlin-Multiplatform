@@ -33,3 +33,4 @@ interface ClienteRepository {
     suspend fun obtenerAbonosPorCliente(clienteId: Long): List<Abono>
     suspend fun registrarAbono(creditoId: Long, monto: Double, fecha: String, tipoId: Long)
 }
+
